@@ -191,6 +191,7 @@ def main():
     config = tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)
     global_step = tf.train.get_or_create_global_step()
     max_steps = train_model.hparams.max_steps
+    elapsed_times = []
     with tf.Session(config=config) as sess:
         print("parameter_count =", sess.run(parameter_count))
 
@@ -229,6 +230,7 @@ def main():
             run_start_time = time.time()
             results = sess.run(fetches)
             run_elapsed_time = time.time() - run_start_time
+            elapsed_times.append(run_elapsed_time)
             if run_elapsed_time > 1.5:
                 print('session.run took %0.1fs' % run_elapsed_time)
 
@@ -287,6 +289,9 @@ def main():
                 print("saving model to", args.output_dir)
                 saver.save(sess, os.path.join(args.output_dir, "model"), global_step=global_step)
                 print("done")
+
+                with open(args.output_dir + '/timing.txt', 'w') as f:
+                    f.write('average t_iter {} \n'.format(np.mean(elapsed_times)))
 
             if should(args.gif_freq):
                 image_dir = os.path.join(args.output_dir, 'images')

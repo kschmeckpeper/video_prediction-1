@@ -580,7 +580,8 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                 assert len(transformed_pix_distribs) == len(masks)
                 gen_pix_distrib = tf.add_n([transformed_pix_distrib * mask
                                             for transformed_pix_distrib, mask in zip(transformed_pix_distribs, masks)])
-                gen_pix_distrib /= tf.reduce_sum(gen_pix_distrib, axis=(1, 2), keepdims=True)
+                if self.hparams.renormalize_pixdistrib:
+                    gen_pix_distrib /= tf.reduce_sum(gen_pix_distrib, axis=(1, 2), keepdims=True)
 
         if 'states' in inputs:
             with tf.name_scope('gen_states'):
@@ -707,6 +708,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             nef=64,
             use_rnn_z=True,
             ablation_conv_rnn_norm=False,
+            renormalize_pixdistrib=True
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
