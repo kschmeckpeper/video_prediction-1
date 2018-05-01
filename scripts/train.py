@@ -234,6 +234,10 @@ def main():
             if run_elapsed_time > 1.5:
                 print('session.run took %0.1fs' % run_elapsed_time)
 
+            with open(args.output_dir + '/timing.txt', 'w') as f:
+                f.write("average t_iter {} \n".format(np.mean(elapsed_times)))
+            print("average t_iter {} \n".format(np.mean(elapsed_times)))
+
             if should(args.progress_freq) or should(args.summary_freq):
                 if step >= 0:
                     elapsed_time = time.time() - start
@@ -271,9 +275,6 @@ def main():
                     except ImportError:
                         pass
 
-                with open(args.output_dir + '/timing.txt', 'w') as f:
-                    f.write("average t_iter {} \n".format(np.mean(elapsed_times)))
-                print("average t_iter {} \n".format(np.mean(elapsed_times)))
                 print("done")
             if should(args.image_summary_freq):
                 print("recording image summary")
