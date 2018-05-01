@@ -238,7 +238,7 @@ def main():
                 print('session.run took %0.1fs' % run_elapsed_time)
 
             with open(args.timing_file, 'w') as f:
-                f.write("average t_iter {} \n".format(np.mean(elapsed_times)))
+                f.write("{}\n".format(np.mean(elapsed_times)))
             print("average t_iter {} \n".format(np.mean(elapsed_times[-20:])))
             if step == 88:
                 import sys; sys.exit("finished")
