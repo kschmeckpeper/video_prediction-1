@@ -270,6 +270,10 @@ def main():
                             summary_writer.add_summary(scalar_pb(name, scalar), results["global_step"])
                     except ImportError:
                         pass
+
+                with open(args.output_dir + '/timing.txt', 'w') as f:
+                    f.write("average t_iter {} \n".format(np.mean(elapsed_times)))
+                print("average t_iter {} \n".format(np.mean(elapsed_times)))
                 print("done")
             if should(args.image_summary_freq):
                 print("recording image summary")
@@ -283,9 +287,7 @@ def main():
                     tf_utils.convert_tensor_to_gif_summary(results["eval_image_summary"]), results["global_step"])
                 print("done")
 
-                with open(args.output_dir + '/timing.txt', 'w') as f:
-                    f.write('average t_iter {} \n'.format(np.mean(elapsed_times)))
-                print('average t_iter {} \n'.format(np.mean(elapsed_times)))
+
 
             if should(args.summary_freq) or should(args.image_summary_freq) or should(args.eval_summary_freq):
                 summary_writer.flush()
