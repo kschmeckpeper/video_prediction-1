@@ -236,7 +236,9 @@ def main():
 
             with open(args.output_dir + '/timing.txt', 'w') as f:
                 f.write("average t_iter {} \n".format(np.mean(elapsed_times)))
-            print("average t_iter {} \n".format(np.mean(elapsed_times)))
+            print("average t_iter {} \n".format(np.mean(elapsed_times[-20:])))
+            if step == 100:
+                import sys; sys.exit("finished")
 
             if should(args.progress_freq) or should(args.summary_freq):
                 if step >= 0:
