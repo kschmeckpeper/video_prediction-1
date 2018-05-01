@@ -107,3 +107,8 @@ events.out.*
 
 logs/
 data/
+
+
+strong/
+weak/
+*.png

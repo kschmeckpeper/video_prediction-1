@@ -237,11 +237,11 @@ def main():
             if run_elapsed_time > 1.5:
                 print('session.run took %0.1fs' % run_elapsed_time)
 
-            print("average t_iter {} \n".format(np.mean(elapsed_times[-20:])))
-            if step == 88:
-                with open(args.timing_file, 'w') as f:
-                    f.write("{}\n".format(np.mean(elapsed_times)))
-                import sys; sys.exit("finished")
+            # print("average t_iter {} \n".format(np.mean(elapsed_times[-20:])))
+            # if step == 88:
+            #     with open(args.timing_file, 'w') as f:
+            #         f.write("{}\n".format(np.mean(elapsed_times)))
+            #     import sys; sys.exit("finished")
 
             if should(args.progress_freq) or should(args.summary_freq):
                 if step >= 0:
