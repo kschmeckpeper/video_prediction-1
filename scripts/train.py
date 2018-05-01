@@ -50,6 +50,9 @@ def main():
     parser.add_argument("--gpu_mem_frac", type=float, default=0, help="fraction of gpu memory to use")
     parser.add_argument("--seed", type=int)
 
+
+    parser.add_argument("--timing_file", type=str, help="")
+
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -234,7 +237,7 @@ def main():
             if run_elapsed_time > 1.5:
                 print('session.run took %0.1fs' % run_elapsed_time)
 
-            with open(args.output_dir + '/timing.txt', 'w') as f:
+            with open(args.output_dir + args.timing_file, 'w') as f:
                 f.write("average t_iter {} \n".format(np.mean(elapsed_times)))
             print("average t_iter {} \n".format(np.mean(elapsed_times[-20:])))
             if step == 100:
