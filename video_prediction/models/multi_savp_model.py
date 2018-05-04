@@ -500,7 +500,9 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                     assert len(transformed_pix_distribs) == len(masks)
                     gen_pix_distrib = tf.add_n([transformed_pix_distrib * mask
                                                 for transformed_pix_distrib, mask in zip(transformed_pix_distribs, masks)])
-                    gen_pix_distrib /= tf.reduce_sum(gen_pix_distrib, axis=(1, 2), keepdims=True)
+
+                    if self.hparams.renormalize_pixdistrib:
+                        gen_pix_distrib /= tf.reduce_sum(gen_pix_distrib, axis=(1, 2), keepdims=True)
 
             outputs['gen_images' + suffix] = gen_image
             outputs['transformed_images' + suffix] = tf.stack(transformed_images, axis=-1)
