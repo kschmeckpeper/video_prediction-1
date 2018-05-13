@@ -124,13 +124,14 @@ class BaseVideoDataset(object):
         dataset = dataset.map(self.parser, num_parallel_calls=batch_size)
         dataset.prefetch(2 * batch_size)
 
-        # Could shuffle individual samples but it becomes too slow. Just shuffle filenames instead.
         # if self.mode == 'train':
         #     min_queue_examples = int(
         #         self.num_examples_per_epoch() * 0.4)
         #     # Ensure that the capacity is sufficiently large to provide good random
         #     # shuffling.
         #     dataset = dataset.shuffle(buffer_size=min_queue_examples + 3 * batch_size)
+        if self.mode == 'train':
+            dataset = dataset.shuffle(buffer_size=128 * 8)
 
         dataset = dataset.repeat(self.num_epochs)
         dataset = dataset.batch(batch_size)
@@ -187,10 +188,10 @@ class BaseVideoDataset(object):
         sequence_length = self.hparams.sequence_length  # desired sequence length
         frame_skip = self.hparams.frame_skip
         time_shift = self.hparams.time_shift
-        if (time_shift and self.mode == 'train') or self.hparams.force_time_shift:
+        if isinstance(example_sequence_length, tf.Tensor):
+            example_sequence_length = tf.cast(example_sequence_length, tf.int32)
+        if (time_shift > 0 and self.mode == 'train') or self.hparams.force_time_shift:
             assert time_shift > 0 and isinstance(time_shift, int)
-            if isinstance(example_sequence_length, tf.Tensor):
-                example_sequence_length = tf.cast(example_sequence_length, tf.int32)
             num_shifts = ((example_sequence_length - 1) - (sequence_length - 1) * (frame_skip + 1)) // time_shift
             assert_message = ('example_sequence_length has to be at least %d when '
                               'sequence_length=%d, frame_skip=%d.' %
@@ -199,6 +200,8 @@ class BaseVideoDataset(object):
             with tf.control_dependencies([tf.assert_greater_equal(num_shifts, 0,
                     data=[example_sequence_length, num_shifts], message=assert_message)]):
                 t_start = tf.random_uniform([], 0, num_shifts + 1, dtype=tf.int32, seed=self.seed) * time_shift
+        elif time_shift < 0:  # if negative, always use the last subsequence
+            t_start = ((example_sequence_length - 1) - (sequence_length - 1) * (frame_skip + 1))
         else:
             t_start = 0
         state_like_t_slice = slice(t_start, t_start + (sequence_length - 1) * (frame_skip + 1) + 1, frame_skip + 1)

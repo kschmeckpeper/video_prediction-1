@@ -14,6 +14,7 @@ from collections import OrderedDict
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.util import nest
 
 from video_prediction import datasets, models
 from video_prediction.utils import ffmpeg_gif, tf_utils
@@ -21,9 +22,9 @@ from video_prediction.utils import ffmpeg_gif, tf_utils
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir", type=str, required=True, help="either a directory containing subdirectories "
-                                                                     "train, val, test, etc, or a directory containing "
-                                                                     "the tfrecords")
+    parser.add_argument("--input_dirs", "--input_dir", type=str, nargs='+', required=True,
+                        help="either a directory containing subdirectories train, val, test, "
+                             "etc, or a directory containing the tfrecords")
     parser.add_argument("--val_input_dirs", type=str, nargs='+', help="directories containing the tfrecords. default: [input_dir]")
     parser.add_argument("--logs_dir", default='logs', help="ignored if output_dir is specified")
     parser.add_argument("--output_dir", help="output directory where json files, summary, model, gifs, etc are saved. "
@@ -38,6 +39,8 @@ def main():
     parser.add_argument("--model", type=str, help="model class name")
     parser.add_argument("--model_hparams", type=str, help="a string of comma separated list of model hyperparameters")
     parser.add_argument("--model_hparams_dict", type=str, help="a json file of model hyperparameters")
+
+    parser.add_argument("--train_batch_sizes", type=int, nargs='+', help="splits for the training datasets")
 
     parser.add_argument("--summary_freq", type=int, default=1000, help="save summaries (except for image and eval summaries) every summary_freq steps")
     parser.add_argument("--image_summary_freq", type=int, default=5000, help="save image summaries every image_summary_freq steps")
@@ -119,15 +122,16 @@ def main():
     print('------------------------------------- End --------------------------------------')
 
     VideoDataset = datasets.get_dataset_class(args.dataset)
-    train_dataset = VideoDataset(args.input_dir, mode='train', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
-    val_input_dirs = args.val_input_dirs or [args.input_dir]
+    train_datasets = [VideoDataset(input_dir, mode='train', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
+                      for input_dir in args.input_dirs]
+    val_input_dirs = args.val_input_dirs or args.input_dirs
     val_datasets = [VideoDataset(val_input_dir, mode='val', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
                     for val_input_dir in val_input_dirs]
-    if len(val_input_dirs) > 1:
-        if isinstance(val_datasets[-1], datasets.KTHVideoDataset):
-            val_datasets[-1].set_sequence_length(40)
-        else:
-            val_datasets[-1].set_sequence_length(30)
+    # if len(val_input_dirs) > 1:
+    #     if isinstance(val_datasets[-1], datasets.KTHVideoDataset):
+    #         val_datasets[-1].set_sequence_length(40)
+    #     else:
+    #         val_datasets[-1].set_sequence_length(30)
 
     def override_hparams_dict(dataset):
         hparams_dict = dict(model_hparams_dict)
@@ -137,23 +141,48 @@ def main():
         return hparams_dict
 
     VideoPredictionModel = models.get_model_class(args.model)
-    train_model = VideoPredictionModel(mode='train', hparams_dict=override_hparams_dict(train_dataset), hparams=args.model_hparams)
-    val_models = [VideoPredictionModel(mode='val', hparams_dict=override_hparams_dict(val_dataset), hparams=args.model_hparams)
-                  for val_dataset in val_datasets]
+    # override hparams from first dataset for train model
+    train_model = VideoPredictionModel(mode='train', hparams_dict=override_hparams_dict(train_datasets[0]), hparams=args.model_hparams)
+    if val_input_dirs == args.input_dirs:
+        val_models = [VideoPredictionModel(mode='val', hparams_dict=override_hparams_dict(val_datasets[0]), hparams=args.model_hparams)]
+    else:
+        val_models = [VideoPredictionModel(mode='val', hparams_dict=override_hparams_dict(val_dataset), hparams=args.model_hparams)
+                      for val_dataset in val_datasets]
 
     batch_size = train_model.hparams.batch_size
     with tf.variable_scope('') as training_scope:
-        train_model.build_graph(*train_dataset.make_batch(batch_size))
-    for val_model, val_dataset in zip(val_models, val_datasets):
+        if args.train_batch_sizes:
+            assert len(args.train_batch_sizes) == len(train_datasets)
+            assert sum(args.train_batch_sizes) == batch_size
+            inputs, targets = zip(*[train_dataset.make_batch(bs)
+                                    for train_dataset, bs in zip(train_datasets, args.train_batch_sizes)])
+        else:
+            assert batch_size % len(train_datasets) == 0
+            inputs, targets = zip(*[train_dataset.make_batch(batch_size // 2) for train_dataset in train_datasets])
+        inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
+        targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
+        train_model.build_graph(inputs, targets)
+    if val_input_dirs == args.input_dirs:
         with tf.variable_scope(training_scope, reuse=True):
-            val_model.build_graph(*val_dataset.make_batch(batch_size))
+            if args.train_batch_sizes:
+                inputs, targets = zip(*[train_dataset.make_batch(bs)
+                                        for train_dataset, bs in zip(train_datasets, args.train_batch_sizes)])
+            else:
+                inputs, targets = zip(*[train_dataset.make_batch(batch_size // 2) for train_dataset in train_datasets])
+            inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
+            targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
+            val_models[0].build_graph(inputs, targets)
+    else:
+        for val_model, val_dataset in zip(val_models, val_datasets):
+            with tf.variable_scope(training_scope, reuse=True):
+                val_model.build_graph(*val_dataset.make_batch(batch_size))
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     with open(os.path.join(args.output_dir, "options.json"), "w") as f:
         f.write(json.dumps(vars(args), sort_keys=True, indent=4))
     with open(os.path.join(args.output_dir, "dataset_hparams.json"), "w") as f:
-        f.write(json.dumps(train_dataset.hparams.values(), sort_keys=True, indent=4))
+        f.write(json.dumps(train_datasets[0].hparams.values(), sort_keys=True, indent=4))  # save hparams from first dataset
     with open(os.path.join(args.output_dir, "model_hparams.json"), "w") as f:
         f.write(json.dumps(train_model.hparams.values(), sort_keys=True, indent=4))
 
@@ -211,7 +240,7 @@ def main():
             def should(freq):
                 return freq and ((step + 1) % freq == 0 or (step + 1) in (0, max_steps - start_step))
 
-            fetches = {"global_step": global_step}
+            fetches = {}
             if step >= 0:
                 fetches["train_op"] = train_model.train_op
 
@@ -252,10 +281,10 @@ def main():
 
             if should(args.progress_freq):
                 # global_step will have the correct step count if we resume from a checkpoint
-                steps_per_epoch = math.ceil(train_dataset.num_examples_per_epoch() / batch_size)
-                train_epoch = math.ceil(results["global_step"] / steps_per_epoch)
-                train_step = (results["global_step"] - 1) % steps_per_epoch + 1
-                print("progress  global step %d  epoch %d  step %d" % (results["global_step"], train_epoch, train_step))
+                steps_per_epoch = math.ceil(sum([train_dataset.num_examples_per_epoch() for train_dataset in train_datasets]) / batch_size)
+                train_epoch = math.ceil(global_step.eval() / steps_per_epoch)
+                train_step = (global_step.eval() - 1) % steps_per_epoch + 1
+                print("progress  global step %d  epoch %d  step %d" % (global_step.eval(), train_epoch, train_step))
                 if step >= 0:
                     print("          image/sec %0.1f  remaining %dm (%0.1fh) (%0.1fd)" %
                           (images_per_sec, remaining_time / 60, remaining_time / 60 / 60, remaining_time / 60 / 60 / 24))
@@ -270,13 +299,13 @@ def main():
 
             if should(args.summary_freq):
                 print("recording summary")
-                summary_writer.add_summary(results["summary"], results["global_step"])
+                summary_writer.add_summary(results["summary"], global_step.eval())
                 if step >= 0:
                     try:
                         from tensorboard.summary import scalar_pb
                         for name, scalar in zip(['images_per_sec', 'remaining_hours'],
                                                 [images_per_sec, remaining_time / 60 / 60]):
-                            summary_writer.add_summary(scalar_pb(name, scalar), results["global_step"])
+                            summary_writer.add_summary(scalar_pb(name, scalar), global_step.eval())
                     except ImportError:
                         pass
 
@@ -284,13 +313,13 @@ def main():
             if should(args.image_summary_freq):
                 print("recording image summary")
                 summary_writer.add_summary(
-                    tf_utils.convert_tensor_to_gif_summary(results["image_summary"]), results["global_step"])
+                    tf_utils.convert_tensor_to_gif_summary(results["image_summary"]), global_step.eval())
                 print("done")
             if should(args.eval_summary_freq):
                 print("recording eval summary")
-                summary_writer.add_summary(results["eval_summary"], results["global_step"])
+                summary_writer.add_summary(results["eval_summary"], global_step.eval())
                 summary_writer.add_summary(
-                    tf_utils.convert_tensor_to_gif_summary(results["eval_image_summary"]), results["global_step"])
+                    tf_utils.convert_tensor_to_gif_summary(results["eval_image_summary"]), global_step.eval())
                 print("done")
 
 
@@ -310,7 +339,7 @@ def main():
                     os.makedirs(image_dir)
 
                 gif_clips = sess.run(val_tensor_clips)
-                gif_step = results["global_step"]
+                gif_step = global_step.eval()
                 for name, clip in gif_clips.items():
                     filename = "%08d-%s.gif" % (gif_step, name)
                     print("saving gif to", os.path.join(image_dir, filename))
