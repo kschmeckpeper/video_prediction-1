@@ -1,0 +1,13 @@
+{
+    "adim": 5,
+    "context_frames": 2,
+    "crop_size": 0,
+    "force_time_shift": false,
+    "frame_skip": 0,
+    "image_view": -1,
+    "scale_size": 0,
+    "sdim": 12,
+    "sequence_length": 15,
+    "time_shift": 3,
+    "use_state": true
+}
