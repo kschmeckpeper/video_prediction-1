@@ -1,4 +1,4 @@
-model_checkpoint_path: "model-140000"
-all_model_checkpoint_paths: "model-130000"
-all_model_checkpoint_paths: "model-135000"
-all_model_checkpoint_paths: "model-140000"
+model_checkpoint_path: "model-190000"
+all_model_checkpoint_paths: "model-180000"
+all_model_checkpoint_paths: "model-185000"
+all_model_checkpoint_paths: "model-190000"
