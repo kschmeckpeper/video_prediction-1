@@ -4,6 +4,7 @@ import re
 import tensorflow as tf
 
 from .base_dataset import VideoDataset
+from collections import OrderedDict
 from .softmotion_dataset import SoftmotionVideoDataset
 
 
@@ -46,5 +47,27 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
             sdim=6,
             adim=3,
             image_view=-1,
+            auto_grasp=-1, # only take first n dimensions of action vector
+            ignore_touch=False,
+            saturate_touch=True,
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
+
+
+    def parser(self, serialized_example):
+        state_like_seqs, action_like_seqs = super(CartgripperVideoDataset, self).parser(serialized_example)
+        if self.hparams.auto_grasp != -1:
+            assert action_like_seqs['actions'].get_shape().as_list()[1] == 5
+            action_like_seqs['actions'] = action_like_seqs['actions'][:,:self.hparams.auto_grasp]
+
+        if self.hparams.ignore_touch:
+            state_like_seqs['states'] = state_like_seqs['states'][:,:-2]
+
+        if self.hparams.saturate_touch and not self.hparams.ignore_touch:
+            assert state_like_seqs['states'].get_shape().as_list()[1] == 7
+            state = state_like_seqs['states'][:,:5]
+            touch = state_like_seqs['states'][:,5:]
+            touch = tf.nn.sigmoid(touch)
+            state_like_seqs['states'] = tf.concat([state, touch], axis=1)
+
+        return state_like_seqs, action_like_seqs
