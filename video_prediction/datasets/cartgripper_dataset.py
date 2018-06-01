@@ -1,4 +1,5 @@
 import itertools
+import pdb
 import re
 
 import tensorflow as tf
@@ -50,6 +51,7 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
             auto_grasp=-1, # only take first n dimensions of action vector
             ignore_touch=False,
             saturate_touch=True,
+            touch_no_state=False,
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -68,6 +70,10 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
             state = state_like_seqs['states'][:,:5]
             touch = state_like_seqs['states'][:,5:]
             touch = tf.nn.sigmoid(touch)
-            state_like_seqs['states'] = tf.concat([state, touch], axis=1)
+
+            if self.hparams.touch_no_state:
+                state_like_seqs['states'] = touch
+            else:
+                state_like_seqs['states'] = tf.concat([state, touch], axis=1)
 
         return state_like_seqs, action_like_seqs

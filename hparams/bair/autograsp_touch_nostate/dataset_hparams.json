@@ -6,8 +6,9 @@
     "scale_size": 0,
     "sequence_length": 15,
     "time_shift": 3,
-    "use_state": false,
+    "use_state": true,
     "adim":5,
     "sdim":7,
-    "auto_grasp":4
+    "auto_grasp":4,
+    "touch_no_state":true
 }
