@@ -48,7 +48,7 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
             sdim=6,
             adim=3,
             image_view=-1,
-            auto_grasp=-1, # only take first n dimensions of action vector
+            autograsp=-1, # only take first n dimensions of action vector
             ignore_touch=False,
             saturate_touch=True,
             touch_no_state=False,
@@ -58,9 +58,9 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
 
     def parser(self, serialized_example):
         state_like_seqs, action_like_seqs = super(CartgripperVideoDataset, self).parser(serialized_example)
-        if self.hparams.auto_grasp != -1:
+        if self.hparams.autograsp != -1:
             assert action_like_seqs['actions'].get_shape().as_list()[1] == 5
-            action_like_seqs['actions'] = action_like_seqs['actions'][:,:self.hparams.auto_grasp]
+            action_like_seqs['actions'] = action_like_seqs['actions'][:,:self.hparams.autograsp]
 
         if self.hparams.ignore_touch:
             state_like_seqs['states'] = state_like_seqs['states'][:,:-2]

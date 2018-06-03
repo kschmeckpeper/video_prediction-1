@@ -9,6 +9,6 @@
     "use_state": true,
     "adim":5,
     "sdim":7,
-    "auto_grasp":4,
+    "autograsp":4,
     "touch_no_state":true
 }
