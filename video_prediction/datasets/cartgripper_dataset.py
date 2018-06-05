@@ -1,9 +1,7 @@
 import itertools
 import pdb
 import re
-
 import tensorflow as tf
-
 from .base_dataset import VideoDataset
 from collections import OrderedDict
 from .softmotion_dataset import SoftmotionVideoDataset
@@ -35,7 +33,7 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
                         '%%d/%s/encoded' % image_name, (48, 64, 3)
         if self.hparams.use_state:
             self.state_like_names_and_shapes['states'] = '%d/endeffector_pos', (self.hparams.sdim,)
-            self.action_like_names_and_shapes['actions'] = '%d/action', (self.hparams.adim,)
+        self.action_like_names_and_shapes['actions'] = '%d/action', (self.hparams.adim,)
         self._check_or_infer_shapes()
 
     def get_default_hparams_dict(self):
@@ -58,22 +56,24 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
 
     def parser(self, serialized_example):
         state_like_seqs, action_like_seqs = super(CartgripperVideoDataset, self).parser(serialized_example)
-        if self.hparams.autograsp != -1:
-            assert action_like_seqs['actions'].get_shape().as_list()[1] == 5
-            action_like_seqs['actions'] = action_like_seqs['actions'][:,:self.hparams.autograsp]
+        if 'actions' in action_like_seqs:
+            if self.hparams.autograsp != -1:
+                assert action_like_seqs['actions'].get_shape().as_list()[1] == 5
+                action_like_seqs['actions'] = action_like_seqs['actions'][:,:self.hparams.autograsp]
 
-        if self.hparams.ignore_touch:
-            state_like_seqs['states'] = state_like_seqs['states'][:,:-2]
+        if 'states' in state_like_seqs:
+            if self.hparams.ignore_touch:
+                state_like_seqs['states'] = state_like_seqs['states'][:,:-2]
 
-        if self.hparams.saturate_touch and not self.hparams.ignore_touch:
-            assert state_like_seqs['states'].get_shape().as_list()[1] == 7
-            state = state_like_seqs['states'][:,:5]
-            touch = state_like_seqs['states'][:,5:]
-            touch = tf.nn.sigmoid(touch)
+            if self.hparams.saturate_touch and not self.hparams.ignore_touch:
+                assert state_like_seqs['states'].get_shape().as_list()[1] == 7
+                state = state_like_seqs['states'][:,:5]
+                touch = state_like_seqs['states'][:,5:]
+                touch = tf.nn.sigmoid(touch)
 
-            if self.hparams.touch_no_state:
-                state_like_seqs['states'] = touch
-            else:
-                state_like_seqs['states'] = tf.concat([state, touch], axis=1)
+                if self.hparams.touch_no_state:
+                    state_like_seqs['states'] = touch
+                else:
+                    state_like_seqs['states'] = tf.concat([state, touch], axis=1)
 
         return state_like_seqs, action_like_seqs
