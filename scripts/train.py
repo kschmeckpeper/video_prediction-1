@@ -26,7 +26,7 @@ def main():
                         help="either a directory containing subdirectories train, val, test, "
                              "etc, or a directory containing the tfrecords")
     parser.add_argument("--val_input_dirs", type=str, nargs='+', help="directories containing the tfrecords. default: [input_dir]")
-    parser.add_argument("--logs_dir", default='logs', help="ignored if output_dir is specified")
+    parser.add_argument("--logs_dir", default='', help="ignored if output_dir is specified")
     parser.add_argument("--output_dir", help="output directory where json files, summary, model, gifs, etc are saved. "
                                              "default is logs_dir/model_fname, where model_fname consists of "
                                              "information from model and model_hparams")
@@ -56,7 +56,12 @@ def main():
 
     parser.add_argument("--timing_file", type=str, help="")
 
+
     args = parser.parse_args()
+
+    if args.logs_dir == '':
+        logsdir = '/'.join(str.split(args.dataset_hparams_dict, '/')[:-1])
+    else: logsdir = args.logs_dir
 
     if args.seed is not None:
         tf.set_random_seed(args.seed)
@@ -78,7 +83,7 @@ def main():
             if t in '[]':
                 t = ''
             model_fname += t
-        args.output_dir = os.path.join(args.logs_dir, model_fname)
+        args.output_dir = os.path.join(logsdir, model_fname)
 
     if args.resume:
         if args.checkpoint:
