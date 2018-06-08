@@ -1,0 +1,17 @@
+{
+    "adim": 5,
+    "autograsp": 4,
+    "context_frames": 2,
+    "crop_size": 0,
+    "force_time_shift": false,
+    "frame_skip": 0,
+    "ignore_touch": true,
+    "image_view": -1,
+    "saturate_touch": true,
+    "scale_size": 0,
+    "sdim": 7,
+    "sequence_length": 15,
+    "time_shift": 3,
+    "touch_no_state": false,
+    "use_state": false
+}

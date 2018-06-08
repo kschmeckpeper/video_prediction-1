@@ -53,9 +53,10 @@ ln -s /data/softmotion30_44k data/softmotion30_44k; \
 ln -s /data/kth data/kth; \
 ln -s /data/ucf101 data/ucf101; \
 ln -s /data/cartgripper_updown_sact data/cartgripper_updown_sact; \
+ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; \
 ln -s /logs logs; \
 tensorboard --logdir logs & \
-export PYTHONPATH=/video_prediction; \
+export PYTHONPATH=/video_prediction-1; \
 {0}\
 """.format(args.command)
 input_dir = command_split[command_split.index('--input_dir') + 1]
@@ -81,7 +82,7 @@ elif input_dir == 'data/ucf101':
             "id": 10035
         }
     )
-elif input_dir == 'data/ag_scripted_longtraj':
+elif 'data/ag_scripted_longtraj' in input_dir:
     data["datasetMounts"].append(
         {
             "containerMountPoint": "/data/ag_scripted_longtraj",
@@ -97,4 +98,4 @@ with open('autogen.json', 'w') as outfile:
     json.dump(data, outfile, sort_keys=True,
               indent=4, separators=(', ', ': '))
 
-# os.system("ngc batch run -f autogen.json")
+os.system("ngc batch run -f autogen.json")
