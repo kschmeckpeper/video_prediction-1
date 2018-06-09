@@ -5,6 +5,7 @@ from .non_trainable_model import GroundTruthVideoPredictionModel, RepeatVideoPre
 from .pix2pix_model import Pix2PixVideoPredictionModel
 from .savp_model import SAVPVideoPredictionModel
 from .multi_savp_model import MultiSAVPVideoPredictionModel
+from .indep_multi_savp_model import IndepMultiSAVPVideoPredictionModel
 from .flow_model import FlowVideoPredictionModel
 from .dna_model import DNAVideoPredictionModel
 from .sna_model import SNAVideoPredictionModel
@@ -20,6 +21,7 @@ def get_model_class(model):
         'pix2pix': 'Pix2PixVideoPredictionModel',
         'savp': 'SAVPVideoPredictionModel',
         'multi_savp': 'MultiSAVPVideoPredictionModel',
+        'indep_multi_savp': 'IndepMultiSAVPVideoPredictionModel',
         'flow': 'FlowVideoPredictionModel',
         'dna': 'DNAVideoPredictionModel',
         'sna': 'SNAVideoPredictionModel',

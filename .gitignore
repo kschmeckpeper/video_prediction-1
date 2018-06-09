@@ -115,3 +115,5 @@ weak/
 checkpoint
 
 modeldata/
+
+model.savp.None/

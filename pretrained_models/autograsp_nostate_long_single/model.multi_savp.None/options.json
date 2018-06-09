@@ -1,5 +1,5 @@
 {
-    "checkpoint": "pretrained_models/autograsp_nostate_long/model.multi_savp.None",
+    "checkpoint": null,
     "dataset": "cartgripper",
     "dataset_hparams": null,
     "dataset_hparams_dict": "pretrained_models/autograsp_nostate_long/dataset_hparams.json",
@@ -8,17 +8,17 @@
     "gpu_mem_frac": 0,
     "image_summary_freq": 5000,
     "input_dirs": [
-        "/workspace/pushing_data/cartgripper/grasping/ag_scripted_longtraj/bad",
-        "/workspace/pushing_data/cartgripper/grasping/ag_scripted_longtraj/good"
+        "/mnt/pushing_data/cartgripper/grasping/ag_scripted_longtraj/bad",
+        "/mnt/pushing_data/cartgripper/grasping/ag_scripted_longtraj/good"
     ],
-    "logs_dir": "",
+    "logs_dir": "/result",
     "metrics_freq": 0,
     "model": "multi_savp",
     "model_hparams": null,
     "model_hparams_dict": "pretrained_models/autograsp_nostate_long/model_hparams.json",
-    "output_dir": "pretrained_models/autograsp_nostate_long/model.multi_savp.None",
+    "output_dir": "/result/model.multi_savp.None",
     "progress_freq": 100,
-    "resume": true,
+    "resume": false,
     "save_freq": 5000,
     "seed": null,
     "summary_freq": 1000,
