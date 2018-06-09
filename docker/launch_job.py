@@ -89,6 +89,13 @@ elif 'data/ag_scripted_longtraj' in input_dir:
             "id": 10217
         }
     )
+elif 'data/ag_reopen_records' in input_dir:
+    data["datasetMounts"].append(
+        {
+            "containerMountPoint": "/data/ag_reopen_records",
+            "id": 10466
+        }
+    )
 assert data["datasetMounts"]
 data["resultContainerMountPoint"] = "/logs"
 data["aceInstance"] = "ngcv%d" % num_gpus

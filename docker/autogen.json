@@ -1,15 +1,15 @@
 {
     "aceInstance": "ngcv1", 
     "aceName": "nv-us-west-2", 
-    "command": "git clone -b dev --single-branch https://github.com/febert/video_prediction-1.git /video_prediction-1; cd /video_prediction-1; pip install -r requirements.txt; ln -s /data/softmotion30_44k data/softmotion30_44k; ln -s /data/kth data/kth; ln -s /data/ucf101 data/ucf101; ln -s /data/cartgripper_updown_sact data/cartgripper_updown_sact; ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; ln -s /logs logs; tensorboard --logdir logs & export PYTHONPATH=/video_prediction-1; CUDA_VISIBLE_DEVICES=1 python scripts/train.py --train_batch_sizes 8 8 --input_dir data/ag_scripted_longtraj/bad data/grasping/ag_scripted_longtraj/good --dataset cartgripper --model multi_savp  --model_hparams_dict pretrained_models/autograsp_notouch_long/model_hparams.json --dataset_hparams_dict pretrained_models/autograsp_notouch_long/dataset_hparams.json", 
+    "command": "git clone -b dev --single-branch https://github.com/febert/video_prediction-1.git /video_prediction-1; cd /video_prediction-1; pip install -r requirements.txt; ln -s /data/softmotion30_44k data/softmotion30_44k; ln -s /data/kth data/kth; ln -s /data/ucf101 data/ucf101; ln -s /data/cartgripper_updown_sact data/cartgripper_updown_sact; ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; ln -s /logs logs; tensorboard --logdir logs & export PYTHONPATH=/video_prediction-1;  CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 8 8 --input_dir data/ag_reopen_records/bad data/ag_reopen_records/good --dataset cartgripper --model multi_savp  --model_hparams_dict pretrained_models/autograsp_reopen/model_hparams.json --dataset_hparams_dict pretrained_models/autograsp_reopen/dataset_hparams.json", 
     "datasetMounts": [
         {
-            "containerMountPoint": "/data/ag_scripted_longtraj", 
-            "id": 10217
+            "containerMountPoint": "/data/ag_reopen_records", 
+            "id": 10466
         }
     ], 
     "dockerImageName": "ucb_rail8888/video_prediction_image:0.1", 
-    "name": "autograsp_notouch_long", 
+    "name": "ag_reopen_records", 
     "publishedContainerPorts": [
         6006
     ], 
