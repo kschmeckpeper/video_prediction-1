@@ -1,5 +1,5 @@
 {
-    "adim": 5,
+    "adim": 4,
     "autograsp": 4,
     "context_frames": 2,
     "crop_size": 0,
@@ -8,7 +8,7 @@
     "ignore_touch": true,
     "saturate_touch": true,
     "scale_size": 0,
-    "sdim": 7,
+    "sdim": 5,
     "sequence_length": 15,
     "time_shift": 3,
     "touch_no_state": false,
