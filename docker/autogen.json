@@ -1,7 +1,7 @@
 {
     "aceInstance": "ngcv1", 
     "aceName": "nv-us-west-2", 
-    "command": "git clone -b dev --single-branch https://github.com/febert/video_prediction-1.git /video_prediction-1; cd /video_prediction-1; pip install -r requirements.txt; ln -s /logs logs; ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; ln -s /data/ag_reopen_records data/ag_reopen_records; tensorboard --logdir logs & export PYTHONPATH=/video_prediction-1; /bin/sleep 360000", 
+    "command": "git clone -b dev --single-branch https://github.com/febert/video_prediction-1.git /video_prediction-1; cd /video_prediction-1; pip install -r requirements.txt; ln -s /logs logs; ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; ln -s /data/ag_reopen_records data/ag_reopen_records; tensorboard --logdir logs  & export PYTHONPATH=/video_prediction-1; CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 8 8 --input_dir /data/ag_reopen_records/good  /data/ag_reopen_records/bad --dataset cartgripper --model multi_savp  --model_hparams_dict pretrained_models/autograsp_reopen/model_hparams.json --dataset_hparams_dict pretrained_models/autograsp_reopen/dataset_hparams.json ", 
     "datasetMounts": [
         {
             "containerMountPoint": "/data/ag_scripted_longtraj", 
@@ -13,7 +13,7 @@
         }
     ], 
     "dockerImageName": "ucb_rail8888/video_prediction_image:0.1", 
-    "name": "experiment", 
+    "name": "autograsp_reopen", 
     "publishedContainerPorts": [
         6006
     ], 

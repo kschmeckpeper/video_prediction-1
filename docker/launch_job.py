@@ -59,7 +59,7 @@ pip install -r requirements.txt; \
 ln -s /logs logs; \
 ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; \
 ln -s /data/ag_reopen_records data/ag_reopen_records; \
-tensorboard --logdir logs & \
+tensorboard --logdir logs  & \
 export PYTHONPATH=/video_prediction-1; \
 {0}\
 """.format(cmd)

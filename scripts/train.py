@@ -126,6 +126,8 @@ def main():
         print(k, "=", v)
     print('------------------------------------- End --------------------------------------')
 
+
+
     VideoDataset = datasets.get_dataset_class(args.dataset)
     train_datasets = [VideoDataset(input_dir, mode='train', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
                       for input_dir in args.input_dirs]
