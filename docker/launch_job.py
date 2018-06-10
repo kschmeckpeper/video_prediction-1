@@ -66,7 +66,8 @@ export PYTHONPATH=/video_prediction-1; \
 
 data["datasetMounts"] = [
     {"containerMountPoint": "/data/ag_scripted_longtraj", "id": 10217},
-    {"containerMountPoint": "/data/ag_reopen_records", "id": 10401}]
+    {"containerMountPoint": "/data/ag_reopen_records", "id": 10401},
+    {"containerMountPoint": "/data/", "id": 10401}]
 
 assert data["datasetMounts"]
 data["resultContainerMountPoint"] = "/logs"

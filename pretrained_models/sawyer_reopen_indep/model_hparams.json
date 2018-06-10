@@ -36,7 +36,7 @@
     "image_gan_weight": 0.0,
     "image_sn_gan_weight": 0.0,
     "image_sn_vae_gan_weight": 0.0,
-    "image_vae_gan_weight": 0.0,
+    "image_vae_gan_weighe": 0.0,
     "kernel_size": [
         5,
         5

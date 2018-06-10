@@ -5,6 +5,7 @@ CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 4 4 4 4 \
  $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/vestri_agpolicy/good \
  $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/vestri_agpolicy/bad \
  --dataset cartgripper --model multi_savp \
-  --model_hparams_dict pretrained_models/sawyer_reopen/model_hparams.json \
-  --dataset_hparams_dict pretrained_models/sawyer_reopen/dataset_hparams.json \
- --logs_dir pretrained_models/sawyer_reopen
+  --model_hparams_dict pretrained_models/sawyer_reopen_indep/model_hparams.json \
+  --dataset_hparams_dict pretrained_models/sawyer_reopen_indep/dataset_hparams.json \
+ --logs_dir pretrained_models/sawyer_reopen_indep/view0 \
+ --dataset_hparams image_view=0
