@@ -3,9 +3,10 @@ import argparse
 import os
 
 parser = argparse.ArgumentParser()
-parser.add_argument('name', type=str)
+parser.add_argument('--name', type=str, default='experiment')
 parser.add_argument('command', type=str)
 parser.add_argument('--num_gpus', type=int, default=1)
+parser.add_argument('--int', type=str, default='False')
 args = parser.parse_args()
 
 print(args.command)
@@ -40,6 +41,12 @@ tar -xf vae_gan.tar -C logs/ucf101/ --no-same-owner; \
 rm vae_gan.tar; \
 """
 
+
+cmd = args.command
+
+if args.int == 'True':
+    cmd = "/bin/sleep 360000"
+
 data = {}
 data['dockerImageName'] = "ucb_rail8888/video_prediction_image:0.1"
 data["aceName"] = "nv-us-west-2"
@@ -49,53 +56,18 @@ data["command"] = """\
 git clone -b dev --single-branch https://github.com/febert/video_prediction-1.git /video_prediction-1; \
 cd /video_prediction-1; \
 pip install -r requirements.txt; \
-ln -s /data/softmotion30_44k data/softmotion30_44k; \
-ln -s /data/kth data/kth; \
-ln -s /data/ucf101 data/ucf101; \
-ln -s /data/cartgripper_updown_sact data/cartgripper_updown_sact; \
-ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; \
 ln -s /logs logs; \
-tensorboard --logdir logs & \
+ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; \
+ln -s /data/ag_reopen_records data/ag_reopen_records; \
+tensorboard --logdir logs  & \
 export PYTHONPATH=/video_prediction-1; \
 {0}\
-""".format(args.command)
-input_dir = command_split[command_split.index('--input_dir') + 1]
-data["datasetMounts"] = []
-if input_dir == 'data/softmotion30_44k':
-    data["datasetMounts"].append(
-        {
-            "containerMountPoint": "/data/softmotion30_44k",
-            "id": 9251
-        }
-    )
-elif input_dir == 'data/kth':
-    data["datasetMounts"].append(
-        {
-            "containerMountPoint": "/data/kth",
-            "id": 9252
-        }
-    )
-elif input_dir == 'data/ucf101':
-    data["datasetMounts"].append(
-        {
-            "containerMountPoint": "/data/ucf101",
-            "id": 10035
-        }
-    )
-elif 'data/ag_scripted_longtraj' in input_dir:
-    data["datasetMounts"].append(
-        {
-            "containerMountPoint": "/data/ag_scripted_longtraj",
-            "id": 10217
-        }
-    )
-elif 'data/ag_reopen_records' in input_dir:
-    data["datasetMounts"].append(
-        {
-            "containerMountPoint": "/data/ag_reopen_records",
-            "id": 10466
-        }
-    )
+""".format(cmd)
+
+data["datasetMounts"] = [
+    {"containerMountPoint": "/data/ag_scripted_longtraj", "id": 10217},
+    {"containerMountPoint": "/data/ag_reopen_records", "id": 10401}]
+
 assert data["datasetMounts"]
 data["resultContainerMountPoint"] = "/logs"
 data["aceInstance"] = "ngcv%d" % num_gpus
