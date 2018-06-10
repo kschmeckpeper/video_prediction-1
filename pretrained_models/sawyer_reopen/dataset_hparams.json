@@ -9,6 +9,5 @@
     "use_state": false,
     "adim":4,
     "sdim":5,
-    "autograsp":4,
     "ignore_touch":true
 }
