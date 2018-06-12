@@ -61,7 +61,6 @@
     "num_samples": 8,
     "num_scales": 1,
     "num_transformed_images": 4,
-    "num_views": 2,
     "nz": 0,
     "prev_image_background": true,
     "repeat": 3,
@@ -73,7 +72,6 @@
         100000
     ],
     "sequence_length": 15,
-    "shared_views": false,
     "state_weight": 0,
     "transformation": "flow",
     "tuple_gan_weight": 0.0,
