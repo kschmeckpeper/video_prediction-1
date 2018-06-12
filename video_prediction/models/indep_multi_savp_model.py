@@ -5,7 +5,6 @@ import tensorflow as tf
 from video_prediction.models import SAVPVideoPredictionModel
 from video_prediction.utils import tf_utils
 from . import vgg_network
-import ipdb
 
 
 class IndepMultiSAVPVideoPredictionModel(SAVPVideoPredictionModel):
