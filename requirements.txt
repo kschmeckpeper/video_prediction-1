@@ -3,4 +3,3 @@ opencv-python
 scipy
 scikit-image
 h5py
-ipdb
