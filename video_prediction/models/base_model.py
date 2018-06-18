@@ -16,6 +16,7 @@ from video_prediction.utils.tf_utils import compute_averaged_gradients, reduce_t
     replace_read_ops, print_loss_info, transpose_batch_time, add_tensor_summaries, add_scalar_summaries, \
     add_plot_summaries, add_summaries
 from . import vgg_network
+import pdb
 
 
 class BaseVideoPredictionModel(object):
