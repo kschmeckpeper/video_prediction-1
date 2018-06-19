@@ -50,6 +50,5 @@ class WeissgripperVideoDataset(SoftmotionVideoDataset):
 
     def parser(self, serialized_example):
         state_like_seqs, action_like_seqs = super(WeissgripperVideoDataset, self).parser(serialized_example)
-
-
+        state_like_seqs['images'] = state_like_seqs['images'][:,self.hparams.start_row:self.hparams.end_row]
         return state_like_seqs, action_like_seqs
