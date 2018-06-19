@@ -6,6 +6,7 @@ from .softmotion_dataset import SoftmotionVideoDataset
 from .kth_dataset import KTHVideoDataset
 from .ucf101_dataset import UCF101VideoDataset
 from .cartgripper_dataset import CartgripperVideoDataset
+from .weissgripper_dataset import WeissgripperVideoDataset
 
 
 def get_dataset_class(dataset):
@@ -16,7 +17,8 @@ def get_dataset_class(dataset):
         'bair': 'SoftmotionVideoDataset',  # alias of softmotion
         'kth': 'KTHVideoDataset',
         'ucf101': 'UCF101VideoDataset',
-        'cartgripper': 'CartgripperVideoDataset',
+        'cartgripper': 'CartgripperVideoDataset','weissgripper':'WeissgripperVideoDataset'
+
     }
     dataset_class = dataset_mappings.get(dataset, dataset)
     dataset_class = globals().get(dataset_class)

@@ -63,6 +63,7 @@
     "num_transformed_images": 4,
     "nz": 0,
     "prev_image_background": true,
+    "renormalize_pixdistrib": true,
     "repeat": 3,
     "rnn": "lstm",
     "schedule_sampling": "inverse_sigmoid",
@@ -72,7 +73,7 @@
         100000
     ],
     "sequence_length": 15,
-    "state_weight": 0,
+    "state_weight": 0.0,
     "transformation": "flow",
     "tuple_gan_weight": 0.0,
     "tuple_vae_gan_weight": 0.0,

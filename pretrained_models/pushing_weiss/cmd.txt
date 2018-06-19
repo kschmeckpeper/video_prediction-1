@@ -1,0 +1,7 @@
+CUDA_VISIBLE_DEVICES=0 python scripts/train.py \
+ --input_dir \
+ $VMPC_DATA_DIR/weiss_gripper_20k \
+ --dataset  weissgripper --model savp \
+  --model_hparams_dict pretrained_models/pushing_weiss/model_hparams.json \
+  --dataset_hparams_dict pretrained_models/pushing_weiss/dataset_hparams.json \
+ --logs_dir pretrained_models/pushing_weiss
