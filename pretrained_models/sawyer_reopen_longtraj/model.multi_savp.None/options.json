@@ -1,0 +1,39 @@
+{
+    "checkpoint": "pretrained_models/sawyer_reopen_longtraj/model.multi_savp.None",
+    "dataset": "cartgripper",
+    "dataset_hparams": null,
+    "dataset_hparams_dict": "pretrained_models/sawyer_reopen_longtraj/dataset_hparams.json",
+    "eval_summary_freq": 0,
+    "gif_freq": 0,
+    "gpu_mem_frac": 0,
+    "image_summary_freq": 5000,
+    "input_dirs": [
+        "/workspace/pushing_data/sawyer_grasping/sawyer_data/sudri_ag/good",
+        "/workspace/pushing_data/sawyer_grasping/sawyer_data/vestri_ag/good",
+        "/workspace/pushing_data/sawyer_grasping/sawyer_data/sudri_ag_long/good",
+        "/workspace/pushing_data/sawyer_grasping/sawyer_data/sudri_ag/bad",
+        "/workspace/pushing_data/sawyer_grasping/sawyer_data/vestri_ag/bad",
+        "/workspace/pushing_data/sawyer_grasping/sawyer_data/sudri_ag_long/bad"
+    ],
+    "logs_dir": "pretrained_models/sawyer_reopen_longtraj",
+    "metrics_freq": 0,
+    "model": "multi_savp",
+    "model_hparams": null,
+    "model_hparams_dict": "pretrained_models/sawyer_reopen_longtraj/model_hparams.json",
+    "output_dir": "pretrained_models/sawyer_reopen_longtraj/model.multi_savp.None",
+    "progress_freq": 100,
+    "resume": true,
+    "save_freq": 5000,
+    "seed": null,
+    "summary_freq": 1000,
+    "timing_file": null,
+    "train_batch_sizes": [
+        2,
+        2,
+        3,
+        3,
+        3,
+        3
+    ],
+    "val_input_dirs": null
+}

@@ -5,6 +5,7 @@ import tensorflow as tf
 from video_prediction.models import SAVPVideoPredictionModel
 from video_prediction.utils import tf_utils
 from . import vgg_network
+import pdb
 
 
 class IndepMultiSAVPVideoPredictionModel(SAVPVideoPredictionModel):
@@ -28,7 +29,7 @@ class IndepMultiSAVPVideoPredictionModel(SAVPVideoPredictionModel):
 
         for i in range(self.hparams.num_views):
             suffix = '%d' % i if i > 0 else ''
-            # ipdb.set_trace()
+            # pdb.set_trace()
             inputs_view = {k: v for k, v in inputs.items() if not k.startswith('images') and not k.startswith('pix_distribs')}
             inputs_view['images'] = inputs['images' + suffix]
             inputs_view['pix_distribs'] = inputs['pix_distribs' + suffix]

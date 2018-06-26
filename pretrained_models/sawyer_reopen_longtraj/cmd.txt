@@ -1,13 +1,12 @@
-CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 2 3 2 3 3 3 \
+CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 2 2 3 3 3 3 \
  --input_dir \
  $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/sudri_ag/good \
- $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/sudri_ag/bad \
  $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/vestri_ag/good \
- $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/vestri_ag/bad \
  $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/sudri_ag_long/good \
+ $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/sudri_ag/bad \
+ $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/vestri_ag/bad \
  $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/sudri_ag_long/bad \
  --dataset cartgripper --model multi_savp \
   --model_hparams_dict pretrained_models/sawyer_reopen_longtraj/model_hparams.json \
   --dataset_hparams_dict pretrained_models/sawyer_reopen_longtraj/dataset_hparams.json \
- --logs_dir pretrained_models/sawyer_reopen_longtraj/view0 \
- --dataset_hparams image_view=0
+ --logs_dir pretrained_models/sawyer_reopen_longtraj

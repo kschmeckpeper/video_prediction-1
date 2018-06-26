@@ -1,6 +1,6 @@
 {
-    "adim": 5,
-    "autograsp": 4,
+    "adim": 4,
+    "autograsp": -1,
     "context_frames": 2,
     "crop_size": 0,
     "force_time_shift": false,
@@ -9,7 +9,7 @@
     "image_view": -1,
     "saturate_touch": true,
     "scale_size": 0,
-    "sdim": 7,
+    "sdim": 5,
     "sequence_length": 15,
     "time_shift": 3,
     "touch_no_state": false,
