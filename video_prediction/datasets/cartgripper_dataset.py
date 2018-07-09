@@ -31,6 +31,7 @@ class CartgripperVideoDataset(SoftmotionVideoDataset):
                     suffix = '%d' % i if i > 0 else ''
                     self.state_like_names_and_shapes['images' + suffix] = \
                         '%%d/%s/encoded' % image_name, (48, 64, 3)
+
         if self.hparams.use_state:
             self.state_like_names_and_shapes['states'] = '%d/endeffector_pos', (self.hparams.sdim,)
         self.action_like_names_and_shapes['actions'] = '%d/action', (self.hparams.adim,)

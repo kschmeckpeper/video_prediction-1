@@ -1,0 +1,9 @@
+CUDA_VISIBLE_DEVICES=0 python scripts/generate.py --batch_size 8 \
+ --input_dir \
+ $VMPC_DATA_DIR/sawyer_grasping/sawyer_data/sudri_ag/good \
+ --dataset cartgripper --model savp \
+  --model_hparams pretrained_models/sawyer_reopen_longtraj_indep/model_hparams.json \
+  --dataset_hparams pretrained_models/sawyer_reopen_longtraj_indep/dataset_hparams.json \
+ --dataset_hparams image_view=0 \
+--model_hparams kl_weight=1e-4,nz=8,e_net=n_layer
+--checkpoint pretrained_models/sawyer_reopen_longtraj_indep/view0/model.savp.kl_weight.1e-4.nz.8.e_net.n_layer

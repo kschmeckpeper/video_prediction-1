@@ -47,7 +47,7 @@
         50000,
         100000
     ],
-    "kl_weight": 0.0001,
+    "kl_weight": 1e-05,
     "l1_weight": 1.0,
     "l2_weight": 0.0,
     "last_frames": 2,
@@ -61,7 +61,7 @@
     "num_samples": 8,
     "num_scales": 1,
     "num_transformed_images": 4,
-    "nz": 10,
+    "nz": 8,
     "prev_image_background": true,
     "renormalize_pixdistrib": true,
     "repeat": 3,

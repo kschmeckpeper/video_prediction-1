@@ -10,5 +10,5 @@ CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 2 2 3 3 3 3 \
   --model_hparams_dict pretrained_models/sawyer_reopen_longtraj_indep/model_hparams.json \
   --dataset_hparams_dict pretrained_models/sawyer_reopen_longtraj_indep/dataset_hparams.json \
  --logs_dir pretrained_models/sawyer_reopen_longtraj_indep/view0 \
- --dataset_hparams image_view=0
---model_hparams kl_weight=1e-4,nz=10,e_net=n_layer
+ --dataset_hparams image_view=0 \
+--model_hparams kl_weight=1e-4,nz=8,e_net=n_layer
