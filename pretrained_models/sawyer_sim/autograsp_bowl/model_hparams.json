@@ -23,7 +23,7 @@
         1,
         1
     ],
-    "downsample_layer": "conv2d",
+    "downsample_layer": "conv_pool2d",
     "e_net": "none",
     "end_lr": 0.0,
     "feature_l2_weight": 0.0,
@@ -63,7 +63,6 @@
     "num_transformed_images": 4,
     "nz": 0,
     "prev_image_background": true,
-    "renormalize_pixdistrib": true,
     "repeat": 3,
     "rnn": "lstm",
     "schedule_sampling": "inverse_sigmoid",
@@ -73,12 +72,12 @@
         100000
     ],
     "sequence_length": 15,
-    "state_weight": 0.0,
+    "state_weight": 0,
     "transformation": "flow",
     "tuple_gan_weight": 0.0,
     "tuple_vae_gan_weight": 0.0,
     "tv_weight": 0.001,
-    "upsample_layer": "deconv2d",
+    "upsample_layer": "upsample_conv2d",
     "use_e_rnn": false,
     "use_rnn_z": true,
     "vae_gan_weight": 0.0,
@@ -87,6 +86,6 @@
     "video_sn_gan_weight": 0.0,
     "video_sn_vae_gan_weight": 0.0,
     "video_vae_gan_weight": 0.0,
-    "where_add": "middle",
+    "where_add": "all",
     "z_l1_weight": 0.0
 }
