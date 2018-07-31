@@ -6,6 +6,7 @@ from .softmotion_dataset import SoftmotionVideoDataset
 from .kth_dataset import KTHVideoDataset
 from .ucf101_dataset import UCF101VideoDataset
 from .cartgripper_dataset import CartgripperVideoDataset
+from .sawyer_dataset import SawyerVideoDataset
 
 
 def get_dataset_class(dataset):
@@ -17,6 +18,7 @@ def get_dataset_class(dataset):
         'kth': 'KTHVideoDataset',
         'ucf101': 'UCF101VideoDataset',
         'cartgripper': 'CartgripperVideoDataset',
+        'sawyer': 'SawyerVideoDataset',
     }
     dataset_class = dataset_mappings.get(dataset, dataset)
     dataset_class = globals().get(dataset_class)
