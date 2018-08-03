@@ -22,6 +22,7 @@ class SawyerSimVideoDataset(SoftmotionVideoDataset):
             use_state=True,
             sdim=5,
             adim=5,
-            image_view=0
+            image_view=0,
+            compressed = True
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))

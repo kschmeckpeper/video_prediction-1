@@ -86,6 +86,7 @@ class BaseVideoDataset(object):
             time_shift=1,
             force_time_shift=False,
             use_state=False,
+            compressed=False,
         )
         return hparams
 
@@ -119,8 +120,10 @@ class BaseVideoDataset(object):
         filenames = self.filenames
         if self.mode == 'train':
             random.shuffle(filenames)
-
-        dataset = tf.data.TFRecordDataset(filenames,  compression_type='GZIP')
+        if self.hparams.compressed:
+            dataset = tf.data.TFRecordDataset(filenames,  compression_type='GZIP')
+        else:
+            dataset = tf.data.TFRecordDataset(filenames)
         dataset = dataset.map(self.parser, num_parallel_calls=batch_size)
         dataset.prefetch(2 * batch_size)
 
@@ -243,8 +246,11 @@ class VideoDataset(BaseVideoDataset):
         action_like_names_and_shapes = OrderedDict([(k, list(v)) for k, v in self.action_like_names_and_shapes.items()])
         from google.protobuf.json_format import MessageToDict
         print(self.filenames[0])
-        options = tf.python_io.TFRecordOptions(tf.python_io.TFRecordCompressionType.GZIP)
-        example = next(tf.python_io.tf_record_iterator(self.filenames[0], options=options))
+        if self.hparams.compressed:
+            options = tf.python_io.TFRecordOptions(tf.python_io.TFRecordCompressionType.GZIP)
+            example = next(tf.python_io.tf_record_iterator(self.filenames[0], options=options))
+        else:
+            example = next(tf.python_io.tf_record_iterator(self.filenames[0]))
         self._dict_message = MessageToDict(tf.train.Example.FromString(example))
         for example_name, name_and_shape in (list(state_like_names_and_shapes.items()) +
                                              list(action_like_names_and_shapes.items())):
