@@ -1,0 +1,9 @@
+CUDA_VISIBLE_DEVICES=2 python scripts/train.py --train_batch_sizes 8 8 \
+ --input_dir \
+ $VMPC_DATA_DIR/sawyer_sim/ag_bowls_highthresh/good \
+ $VMPC_DATA_DIR/sawyer_sim/ag_bowls_highthresh/bad \
+ --dataset sawyer_sim --model savp \
+  --model_hparams_dict pretrained_models/sawyer_sim/ag_high_bowl/model_hparams.json \
+  --dataset_hparams_dict pretrained_models/sawyer_sim/ag_high_bowl/dataset_hparams.json \
+ --logs_dir pretrained_models/sawyer_sim/ag_high_bowl/view0 \
+--dataset_hparams image_view=0
