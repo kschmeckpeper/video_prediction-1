@@ -11,7 +11,7 @@ class SawyerSimVideoDataset(SoftmotionVideoDataset):
         if self.hparams.use_state:
             self.state_like_names_and_shapes['states'] = '%d/env/state', (5,)
             self.action_like_names_and_shapes['actions'] = '%d/policy/actions', (4,)
-        # self._check_or_infer_shapes()
+        self._check_or_infer_shapes()
 
     def get_default_hparams_dict(self):
         default_hparams = super(SawyerSimVideoDataset, self).get_default_hparams_dict()
