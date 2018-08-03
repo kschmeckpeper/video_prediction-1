@@ -1,0 +1,9 @@
+CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 8 8 \
+ --input_dir \
+ $VMPC_DATA_DIR/sawyer_sim/sawyer_ag_openaction_bowlsfork/good \
+ $VMPC_DATA_DIR/sawyer_sim/sawyer_ag_openaction_bowlsfork/bad \
+ --dataset sawyer_sim --model savp \
+  --model_hparams_dict pretrained_models/sawyer_sim/sawyer_ag_openaction_bowlsfork/model_hparams.json \
+  --dataset_hparams_dict pretrained_models/sawyer_sim/sawyer_ag_openaction_bowlsfork/dataset_hparams.json \
+ --logs_dir pretrained_models/sawyer_sim/sawyer_ag_openaction_bowlsfork/view0 \
+ --dataset_hparams image_view=0
