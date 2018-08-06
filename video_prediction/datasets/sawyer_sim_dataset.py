@@ -10,7 +10,7 @@ class SawyerSimVideoDataset(SoftmotionVideoDataset):
         self.state_like_names_and_shapes['images'] = '%d/env/image_view{}/encoded'.format(self.hparams.image_view), (48, 64, 3)
         if self.hparams.use_state:
             self.state_like_names_and_shapes['states'] = '%d/env/state', (self.hparams.sdim,)
-            self.action_like_names_and_shapes['actions'] = '%d/policy/actions', (self.hparams.adim,)
+        self.action_like_names_and_shapes['actions'] = '%d/policy/actions', (self.hparams.adim,)
         self._check_or_infer_shapes()
 
     def get_default_hparams_dict(self):
