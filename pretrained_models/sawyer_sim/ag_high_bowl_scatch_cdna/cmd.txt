@@ -1,6 +1,0 @@
-CUDA_VISIBLE_DEVICES=2 python scripts/train.py --train_batch_sizes 8 8 \
- --input_dir   /mnt/sda1/pushing_data/sawyer_sim/ag_bowls_highthresh/good \
-               /mnt/sda1/pushing_data/sawyer_sim/ag_bowls_highthresh/bad \
-  --dataset sawyer_sim --model savp \
-  --conf pretrained_models/sawyer_sim/ag_high_bowl_scratch \
-   --dataset_hparams image_view=0
