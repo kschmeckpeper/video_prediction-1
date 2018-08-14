@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import pdb
 import argparse
 import errno
 import itertools
@@ -33,6 +34,8 @@ def main():
     parser.add_argument("--checkpoint", help="directory with checkpoint or checkpoint name (e.g. checkpoint_dir/model-200000)")
     parser.add_argument("--resume", action='store_true', help='resume from lastest checkpoint in output_dir.')
 
+    parser.add_argument("--conf", type=str, default='', help="folder with all config files")
+
     parser.add_argument("--dataset", type=str, help="dataset class name")
     parser.add_argument("--dataset_hparams", type=str, help="a string of comma separated list of dataset hyperparameters")
     parser.add_argument("--dataset_hparams_dict", type=str, help="a json file of dataset hyperparameters")
@@ -59,14 +62,22 @@ def main():
 
     args = parser.parse_args()
 
-    if args.logs_dir == '':
-        logsdir = '/'.join(str.split(args.dataset_hparams_dict, '/')[:-1])
-    else: logsdir = args.logs_dir
+    logsdir = args.logs_dir
 
     if args.seed is not None:
         tf.set_random_seed(args.seed)
         np.random.seed(args.seed)
         random.seed(args.seed)
+
+    if args.conf != '':
+        dataset_hparams_file = args.conf + '/dataset_hparams.json'
+        model_hparams_file = args.conf + '/model_hparams.json'
+    else:
+        dataset_hparams_file = args.dataset_hparams_dict
+        model_hparams_file = args.model_hparams_dict
+
+    if args.conf != '':
+        logsdir = args.conf + '/' + args.dataset_hparams
 
     if args.output_dir is None:
         list_depth = 0
@@ -92,11 +103,11 @@ def main():
 
     dataset_hparams_dict = {}
     model_hparams_dict = {}
-    if args.dataset_hparams_dict:
-        with open(args.dataset_hparams_dict) as f:
+    if dataset_hparams_file:
+        with open(dataset_hparams_file) as f:
             dataset_hparams_dict.update(json.loads(f.read()))
-    if args.model_hparams_dict:
-        with open(args.model_hparams_dict) as f:
+    if model_hparams_file:
+        with open(model_hparams_file) as f:
             model_hparams_dict.update(json.loads(f.read()))
     if args.checkpoint:
         checkpoint_dir = os.path.normpath(args.checkpoint)
