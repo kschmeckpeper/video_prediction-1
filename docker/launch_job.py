@@ -25,6 +25,7 @@ def launch_job_func(hyper, options, int, test, name):
     data["datasetMounts"] = [
         {"containerMountPoint": "/data/autograsp_newphysics_1", "id": 11701},
         {"containerMountPoint": "/data/autograsp_allobj_newphysics_1", "id": 11702},
+        {"containerMountPoint": "/data/autograsp_bowls", "id": 11720},
                              ]
 
     ngpu = 1

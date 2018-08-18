@@ -179,6 +179,8 @@ def main():
             inputs, targets = zip(*[train_dataset.make_batch(batch_size // 2) for train_dataset in train_datasets])
         inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
         targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
+
+
         train_model.build_graph(inputs, targets)
     if val_input_dirs == args.input_dirs:
         with tf.variable_scope(training_scope, reuse=True):
@@ -243,6 +245,12 @@ def main():
     max_steps = train_model.hparams.max_steps
     elapsed_times = []
     with tf.Session(config=config) as sess:
+
+        #### debug
+        pdb.set_trace()
+        actions = sess.run(inputs['actions'])
+        #### end debug
+
         print("parameter_count =", sess.run(parameter_count))
 
         sess.run(tf.global_variables_initializer())
