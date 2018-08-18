@@ -1,6 +1,6 @@
 {
     "aceName": "nv-us-west-2",
-    "command": "cd /result && tensorboard --logdir . &      export VMPC_DATA_DIR=/mnt/pushing_data;     export TEN_DATA=/mnt/tensorflow_data;     export ALEX_DATA=/mnt/pretrained_models;     export RESULT_DIR=/result; cd /workspace/video_prediction; git checkout dev; git pull;cd /workspace/video_prediction/docker;CUDA_VISIBLE_DEVICES=0 python ../scripts/train.py  --conf ../pretrained_models/sawyer_sim/autograsp_bowl_newphysics  --train_batch_sizes 8 8 \\\n --input_dir  $VMPC_DATA_DIR/sawyer_sim/ag_bowls_highthresh/good \\\n               $VMPC_DATA_DIR/sawyer_sim/ag_bowls_highthresh/bad \\\n  --dataset sawyer --model savp \\\n  --dataset_hparams image_view=0",
+    "command": "cd /result && tensorboard --logdir . &      export VMPC_DATA_DIR=/mnt/pushing_data;     export TEN_DATA=/mnt/tensorflow_data;     export ALEX_DATA=/mnt/pretrained_models;     export RESULT_DIR=/result; cd /workspace/video_prediction; git checkout dev; git pull;cd /workspace/video_prediction/docker;CUDA_VISIBLE_DEVICES=0 python ../scripts/train.py  --conf ../pretrained_models/sawyer_sim/autograsp_bowl_newphysics  --train_batch_sizes 8 8 \\\n --input_dir  /data/autograsp_newphysics_1/good \\\n              /data/autograsp_newphysics_1/bad \\\n  --dataset sawyer --model savp \\\n  --dataset_hparams image_view=0 --model_hparams kl_weight=1e-3 --logs_dir /result",
     "dockerImageName": "ucb_rail8888/tf_mj1.5:latest",
     "datasetMounts": [
         {
@@ -13,7 +13,7 @@
         }
     ],
     "aceInstance": "ngcv1",
-    "name": "int",
+    "name": "kl1e-3",
     "resultContainerMountPoint": "/result",
     "publishedContainerPorts": [
         6006

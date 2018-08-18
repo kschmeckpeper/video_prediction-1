@@ -76,8 +76,8 @@ def main():
         dataset_hparams_file = args.dataset_hparams_dict
         model_hparams_file = args.model_hparams_dict
 
-    if args.conf != '':
-        logsdir = args.conf + '/' + args.dataset_hparams
+    # if args.conf != '':
+    #     logsdir = args.conf + '/' + args.dataset_hparams
 
     if args.output_dir is None:
         list_depth = 0
