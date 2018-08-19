@@ -180,7 +180,6 @@ def main():
         inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
         targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
 
-
         train_model.build_graph(inputs, targets)
     if val_input_dirs == args.input_dirs:
         with tf.variable_scope(training_scope, reuse=True):

@@ -26,6 +26,7 @@ def launch_job_func(hyper, options, int, test, name):
         {"containerMountPoint": "/data/autograsp_newphysics_1", "id": 11701},
         {"containerMountPoint": "/data/autograsp_allobj_newphysics_1", "id": 11702},
         {"containerMountPoint": "/data/autograsp_bowls", "id": 11720},
+        {"containerMountPoint": "/data/autograsp_epsilon_policy_newphysics_1", "id": 11730},
                              ]
 
     ngpu = 1
