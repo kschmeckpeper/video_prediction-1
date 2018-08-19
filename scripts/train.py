@@ -245,12 +245,6 @@ def main():
     max_steps = train_model.hparams.max_steps
     elapsed_times = []
     with tf.Session(config=config) as sess:
-
-        #### debug
-        pdb.set_trace()
-        actions = sess.run(inputs['actions'])
-        #### end debug
-
         print("parameter_count =", sess.run(parameter_count))
 
         sess.run(tf.global_variables_initializer())
