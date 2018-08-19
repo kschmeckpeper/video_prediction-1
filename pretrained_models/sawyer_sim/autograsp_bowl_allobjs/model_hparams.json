@@ -24,7 +24,7 @@
         1
     ],
     "downsample_layer": "conv_pool2d",
-    "e_net": "n_layer",
+    "e_net": "none",
     "end_lr": 0.0,
     "feature_l2_weight": 0.0,
     "first_image_background": true,
@@ -47,7 +47,7 @@
         50000,
         100000
     ],
-    "kl_weight": 0.0001,
+    "kl_weight": 0.0,
     "l1_weight": 1.0,
     "l2_weight": 0.0,
     "last_frames": 2,
@@ -61,9 +61,8 @@
     "num_samples": 8,
     "num_scales": 1,
     "num_transformed_images": 4,
-    "nz": 8,
+    "nz": 0,
     "prev_image_background": true,
-    "renormalize_pixdistrib": true,
     "repeat": 3,
     "rnn": "lstm",
     "schedule_sampling": "inverse_sigmoid",
@@ -73,7 +72,7 @@
         100000
     ],
     "sequence_length": 15,
-    "state_weight": 0.0,
+    "state_weight": 0,
     "transformation": "flow",
     "tuple_gan_weight": 0.0,
     "tuple_vae_gan_weight": 0.0,
