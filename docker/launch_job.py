@@ -1,81 +1,64 @@
 import json
 import argparse
+import pdb
 import os
+import re
+import pdb
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--name', type=str, default='experiment')
-parser.add_argument('command', type=str)
-parser.add_argument('--num_gpus', type=int, default=1)
-parser.add_argument('--int', type=str, default='False')
-args = parser.parse_args()
+def launch_job_func(hyper, options, int, test, name):
 
-print(args.command)
+    data = {}
+    start_dir = "/workspace/video_prediction/docker"
 
-command_split = args.command.split(' ')
+    data["aceName"] = "nv-us-west-2"
+    data["command"] = \
+    "cd /result && tensorboard --logdir . & \
+     export VMPC_DATA_DIR=/mnt/pushing_data;\
+     export TEN_DATA=/mnt/tensorflow_data;\
+     export ALEX_DATA=/mnt/pretrained_models;\
+     export RESULT_DIR=/result; " + \
+     "cd /workspace/video_prediction; git checkout dev; git pull;" + \
+     "cd {};".format(start_dir)
 
-if command_split[0].startswith('CUDA_VISIBLE_DEVICES='):
-    cuda_visible_devices = command_split[0].replace('CUDA_VISIBLE_DEVICES=', '')
-    if cuda_visible_devices == '':
-        num_gpus = 0
+    data['dockerImageName'] = "ucb_rail8888/tf_mj1.5:latest"
+
+    data["datasetMounts"] = [
+        {"containerMountPoint": "/data/autograsp_newphysics_1", "id": 11701},
+        {"containerMountPoint": "/data/autograsp_allobj_newphysics_1", "id": 11702},
+        {"containerMountPoint": "/data/autograsp_bowls", "id": 11720},
+        {"containerMountPoint": "/data/autograsp_epsilon_policy_newphysics_1", "id": 11730},
+                             ]
+
+    ngpu = 1
+    data["aceInstance"] = "ngcv{}".format(ngpu)
+    if int== 'True':
+        command = "/bin/sleep 360000"
+        data["name"] = 'int' + name
     else:
-        num_gpus = len(cuda_visible_devices.split(','))
-else:
-    num_gpus = 1
-assert num_gpus in (1, 2, 4, 8)
+        command = "CUDA_VISIBLE_DEVICES=0 python ../scripts/train.py " + " --conf " + hyper  + " " + options
 
-"""
-wget http://people.eecs.berkeley.edu/~alexlee_gk/projects/savp/ucf101.tar; \
-tar -xf ucf101.tar -C logs/ --no-same-owner; \
-rm ucf101.tar; \
-"""
-"""
-wget http://people.eecs.berkeley.edu/~alexlee_gk/projects/savp/gan.tar; \
-mkdir logs/ucf101; \
-tar -xf gan.tar -C logs/ucf101/ --no-same-owner; \
-rm gan.tar; \
-"""
-"""
-wget http://people.eecs.berkeley.edu/~alexlee_gk/projects/savp/vae_gan.tar; \
-mkdir logs/ucf101; \
-tar -xf vae_gan.tar -C logs/ucf101/ --no-same-owner; \
-rm vae_gan.tar; \
-"""
+    data["name"] = name
+    data["command"] += command
+    data["resultContainerMountPoint"] = "/result"
+    data["publishedContainerPorts"] = [6006] #for tensorboard
 
+    with open('autogen.json', 'w') as outfile:
+        json.dump(data, outfile, indent=4)
 
-cmd = args.command
+    print('#######################')
+    print('command', data["command"])
 
-if args.int == 'True':
-    cmd = "/bin/sleep 360000"
+    if not bool(test):
+        os.system("ngc batch run -f autogen.json")
 
-data = {}
-data['dockerImageName'] = "ucb_rail8888/video_prediction_image:0.1"
-data["aceName"] = "nv-us-west-2"
-data["name"] = args.name
-# git clone git@github.com:alexlee-gk/video_prediction.git /video_prediction; \
-data["command"] = """\
-git clone -b dev --single-branch https://github.com/febert/video_prediction-1.git /video_prediction-1; \
-cd /video_prediction-1; \
-pip install -r requirements.txt; \
-ln -s /logs logs; \
-ln -s /data/ag_scripted_longtraj data/ag_scripted_longtraj; \
-ln -s /data/ag_reopen_records data/ag_reopen_records; \
-tensorboard --logdir logs  & \
-export PYTHONPATH=/video_prediction-1; \
-{0}\
-""".format(cmd)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='write json configuration for ngc')
+    parser.add_argument('hyper', type=str, help='relative path to folder with hyperparams files', default="")
+    parser.add_argument('--options', default='', type=str, help='options')
+    parser.add_argument('--int', default='False', type=str, help='interactive')
+    parser.add_argument('--name', default='', type=str, help='additional arguments')
+    parser.add_argument('--test', default=0, type=int, help='testrun')
+    args = parser.parse_args()
 
-data["datasetMounts"] = [
-    {"containerMountPoint": "/data/ag_scripted_longtraj", "id": 10217},
-    {"containerMountPoint": "/data/ag_reopen_records", "id": 10401},
-    {"containerMountPoint": "/data/", "id": 10401}]
+    launch_job_func(args.hyper, args.options, args.int, args.test, args.name)
 
-assert data["datasetMounts"]
-data["resultContainerMountPoint"] = "/logs"
-data["aceInstance"] = "ngcv%d" % num_gpus
-data["publishedContainerPorts"] = [6006]
-
-with open('autogen.json', 'w') as outfile:
-    json.dump(data, outfile, sort_keys=True,
-              indent=4, separators=(', ', ': '))
-
-os.system("ngc batch run -f autogen.json")

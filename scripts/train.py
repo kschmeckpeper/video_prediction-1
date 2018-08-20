@@ -76,8 +76,8 @@ def main():
         dataset_hparams_file = args.dataset_hparams_dict
         model_hparams_file = args.model_hparams_dict
 
-    if args.conf != '':
-        logsdir = args.conf + '/' + args.dataset_hparams
+    # if args.conf != '':
+    #     logsdir = args.conf + '/' + args.dataset_hparams
 
     if args.output_dir is None:
         list_depth = 0
@@ -179,6 +179,7 @@ def main():
             inputs, targets = zip(*[train_dataset.make_batch(batch_size // 2) for train_dataset in train_datasets])
         inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
         targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
+
         train_model.build_graph(inputs, targets)
     if val_input_dirs == args.input_dirs:
         with tf.variable_scope(training_scope, reuse=True):
