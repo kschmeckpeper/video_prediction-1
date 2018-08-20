@@ -35,5 +35,4 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
         if self.hparams.append_touch:
             touch_data = state_like_seqs.pop('touch')
             state_like_seqs['states'] = tf.concat((state_like_seqs['states'], tf.nn.sigmoid(touch_data)), axis = -1)
-            print(state_like_seqs)
-            print(1 / 0)
+        return state_like_seqs, action_like_seqs
