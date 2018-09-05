@@ -1,0 +1,6 @@
+CUDA_VISIBLE_DEVICES=0 python scripts/train.py \
+ --input_dir data/gelsight_data \ 
+ --dataset gelsight --model savp \
+  --model_hparams_dict pretrained_models/gelsight_experiments/model_hparams.json \
+  --dataset_hparams_dict pretrained_models/gelsight_experiments/dataset_hparams.json \
+ --logs_dir logs/gelsight_logs \
