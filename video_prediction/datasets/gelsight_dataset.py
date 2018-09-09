@@ -18,7 +18,7 @@ class GelsightDataset(SoftmotionVideoDataset):
         default_hparams = super(GelsightDataset, self).get_default_hparams_dict()
         hparams = dict(
             context_frames=2,
-            sequence_length=18,
+            sequence_length=15,
             time_shift=3,
             use_state=False,
             sdim=5,
