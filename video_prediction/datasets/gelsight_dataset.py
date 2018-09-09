@@ -11,7 +11,7 @@ class GelsightDataset(SoftmotionVideoDataset):
         #     self.state_like_names_and_shapes['states'] = '%d/env/state', (self.hparams.sdim,)
         #     if self.hparams.append_touch:
         #         self.state_like_names_and_shapes['touch'] = '%d/env/finger_sensors', (1,)
-        self.action_like_names_and_shapes['action'] = '%d/action', (3,)
+        self.action_like_names_and_shapes['actions'] = '%d/action', (3,)
         self._check_or_infer_shapes()
 
     def get_default_hparams_dict(self):

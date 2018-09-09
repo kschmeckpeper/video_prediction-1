@@ -2,6 +2,7 @@ import itertools
 
 import numpy as np
 import tensorflow as tf
+import pdb
 from tensorflow.python.util import nest
 
 from video_prediction import ops, flow_ops
@@ -419,49 +420,50 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
         for i, (out_channels, use_conv_rnn) in enumerate(self.encoder_layer_specs):
             with tf.variable_scope('h%d' % i):
                 if i == 0:
-                    h = tf.concat([image, self.inputs['images'][0]], axis=-1)
+                    _h = tf.concat([image, self.inputs['images'][0]], axis=-1)
                     kernel_size = (5, 5)
                 else:
-                    h = layers[-1][-1]
+                    _h = layers[-1][-1]
                     kernel_size = (3, 3)
                 if self.hparams.where_add == 'all' or (self.hparams.where_add == 'input' and i == 0):
-                    h = tile_concat([h, state_action_z[:, None, None, :]], axis=-1)
-                h = downsample_layer(h, out_channels, kernel_size=kernel_size, strides=(2, 2))
-                h = norm_layer(h)
-                h = tf.nn.relu(h)
+                    _h = tile_concat([_h, state_action_z[:, None, None, :]], axis=-1)
+
+                _h = downsample_layer(_h, out_channels, kernel_size=kernel_size, strides=(2, 2))
+                _h = norm_layer(_h)
+                _h = tf.nn.relu(_h)
             if use_conv_rnn:
                 conv_rnn_state = conv_rnn_states[len(new_conv_rnn_states)]
                 with tf.variable_scope('%s_h%d' % (self.hparams.conv_rnn, i)):
                     if self.hparams.where_add == 'all':
-                        conv_rnn_h = tile_concat([h, state_action_z[:, None, None, :]], axis=-1)
+                        conv_rnn_h = tile_concat([_h, state_action_z[:, None, None, :]], axis=-1)
                     else:
-                        conv_rnn_h = h
+                        conv_rnn_h = _h
                     conv_rnn_h, conv_rnn_state = self._conv_rnn_func(conv_rnn_h, conv_rnn_state, out_channels)
                 new_conv_rnn_states.append(conv_rnn_state)
-            layers.append((h, conv_rnn_h) if use_conv_rnn else (h,))
+            layers.append((_h, conv_rnn_h) if use_conv_rnn else (_h,))
 
         num_encoder_layers = len(layers)
         for i, (out_channels, use_conv_rnn) in enumerate(self.decoder_layer_specs):
             with tf.variable_scope('h%d' % len(layers)):
                 if i == 0:
-                    h = layers[-1][-1]
+                    _h = layers[-1][-1]
                 else:
-                    h = tf.concat([layers[-1][-1], layers[num_encoder_layers - i - 1][-1]], axis=-1)
+                    _h = tf.concat([layers[-1][-1], layers[num_encoder_layers - i - 1][-1]], axis=-1)
                 if self.hparams.where_add == 'all' or (self.hparams.where_add == 'middle' and i == 0):
-                    h = tile_concat([h, state_action_z[:, None, None, :]], axis=-1)
-                h = upsample_layer(h, out_channels, kernel_size=(3, 3), strides=(2, 2))
-                h = norm_layer(h)
-                h = tf.nn.relu(h)
+                    _h = tile_concat([_h, state_action_z[:, None, None, :]], axis=-1)
+                _h = upsample_layer(_h, out_channels, kernel_size=(3, 3), strides=(2, 2))
+                _h = norm_layer(_h)
+                _h = tf.nn.relu(_h)
             if use_conv_rnn:
                 conv_rnn_state = conv_rnn_states[len(new_conv_rnn_states)]
                 with tf.variable_scope('%s_h%d' % (self.hparams.conv_rnn, len(layers))):
                     if self.hparams.where_add == 'all':
-                        conv_rnn_h = tile_concat([h, state_action_z[:, None, None, :]], axis=-1)
+                        conv_rnn_h = tile_concat([_h, state_action_z[:, None, None, :]], axis=-1)
                     else:
-                        conv_rnn_h = h
+                        conv_rnn_h = _h
                     conv_rnn_h, conv_rnn_state = self._conv_rnn_func(conv_rnn_h, conv_rnn_state, out_channels)
                 new_conv_rnn_states.append(conv_rnn_state)
-            layers.append((h, conv_rnn_h) if use_conv_rnn else (h,))
+            layers.append((_h, conv_rnn_h) if use_conv_rnn else (_h,))
         assert len(new_conv_rnn_states) == len(conv_rnn_states)
 
         if self.hparams.last_frames and self.hparams.num_transformed_images:

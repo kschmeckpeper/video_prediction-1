@@ -176,7 +176,7 @@ def main():
                                     for train_dataset, bs in zip(train_datasets, args.train_batch_sizes)])
         else:
             assert batch_size % len(train_datasets) == 0
-            inputs, targets = zip(*[train_dataset.make_batch(batch_size // 2) for train_dataset in train_datasets])
+            inputs, targets = zip(*[train_dataset.make_batch(batch_size // len(train_datasets)) for train_dataset in train_datasets])
         inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
         targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
 
@@ -195,6 +195,8 @@ def main():
         for val_model, val_dataset in zip(val_models, val_datasets):
             with tf.variable_scope(training_scope, reuse=True):
                 val_model.build_graph(*val_dataset.make_batch(batch_size))
+
+    pdb.set_trace()
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
