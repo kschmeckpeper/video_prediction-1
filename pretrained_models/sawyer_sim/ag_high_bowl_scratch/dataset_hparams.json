@@ -6,7 +6,5 @@
     "scale_size": 0,
     "sequence_length": 15,
     "time_shift": 3,
-    "use_state": false,
-    "adim":4,
-    "sdim":5
+    "use_state": false
 }

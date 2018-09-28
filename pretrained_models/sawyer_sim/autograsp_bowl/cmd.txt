@@ -7,3 +7,10 @@ CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 8 8 \
   --dataset_hparams_dict pretrained_models/sawyer_sim/autograsp_bowl/dataset_hparams.json \
  --logs_dir pretrained_models/sawyer_sim/autograsp_bowl/view0 \
  --dataset_hparams image_view=0
+
+
+  python launch_job.py ../pretrained_models/sawyer_sim/autograsp_bowl --options ' --train_batch_sizes 8 8 \
+ --input_dir  /data/autograsp_bowls/good \
+              /data/autograsp_bowls/bad \
+  --dataset cartgripper --model savp \
+  --dataset_hparams image_view=0 --logs_dir /result' --name  autograsp_bowls_olddata
