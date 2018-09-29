@@ -7,7 +7,14 @@ from .softmotion_dataset import SoftmotionVideoDataset
 class SawyerVideoDataset(SoftmotionVideoDataset):
     def __init__(self, *args, **kwargs):
         VideoDataset.__init__(self, *args, **kwargs)
-        self.state_like_names_and_shapes['images'] = '%d/env/image_view{}/encoded'.format(self.hparams.image_view), (48, 64, 3)
+
+        for i in self.hparams.image_view:
+            img_name = 'images{}'.format(i)
+            if i == 0:
+                img_name = 'images'
+            img_format = '%d/env/image_view{}/encoded'.format(i), (48, 64, 3)
+            self.state_like_names_and_shapes[img_name] = img_format
+
         if self.hparams.use_state:
             self.state_like_names_and_shapes['states'] = '%d/env/state', (self.hparams.sdim,)
             if self.hparams.append_touch:
@@ -24,9 +31,9 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
             use_state=True,
             sdim=5,
             adim=4,
-            image_view=0,
+            image_view=[0],
             compressed = True,
-            append_touch=False
+            append_touch=False,
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
