@@ -10,7 +10,7 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
 
         for i in self.hparams.image_view:
             img_name = 'images{}'.format(i)
-            if i == 0:
+            if i==0 or len(self.hparams.image_view) == 1:
                 img_name = 'images'
             img_format = '%d/env/image_view{}/encoded'.format(i), (48, 64, 3)
             self.state_like_names_and_shapes[img_name] = img_format
