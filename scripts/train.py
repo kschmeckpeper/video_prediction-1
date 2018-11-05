@@ -36,9 +36,9 @@ def main():
 
     parser.add_argument("--conf", type=str, default='', help="folder with all config files")
 
-    parser.add_argument("--dataset", type=str, help="dataset class name")
-    parser.add_argument("--dataset_hparams", type=str, help="a string of comma separated list of dataset hyperparameters")
-    parser.add_argument("--dataset_hparams_dict", type=str, help="a json file of dataset hyperparameters")
+    parser.add_argument("--dataset", type=str, nargs='+', help="dataset class name")
+    parser.add_argument("--dataset_hparams", type=str, nargs='+', help="a string of comma separated list of dataset hyperparameters")
+    parser.add_argument("--dataset_hparams_dict", type=str, nargs='+', help="a json file of dataset hyperparameters")
     parser.add_argument("--model", type=str, help="model class name")
     parser.add_argument("--model_hparams", type=str, help="a string of comma separated list of model hyperparameters")
     parser.add_argument("--model_hparams_dict", type=str, help="a json file of model hyperparameters")
@@ -61,6 +61,12 @@ def main():
 
 
     args = parser.parse_args()
+    if len(args.dataset) == 1:
+        args.dataset = args.dataset[0]
+        args.dataset_hparams = args.dataset_hparams[0]
+        args.dataset_hparams_dict = args.dataset_hparams_dict[0]
+    else:
+        assert len(args.dataset) == len(args.dataset_hparams_dict) and len(args.dataset) == len(args.dataset_hparams_dict)
 
     logsdir = args.logs_dir
 
@@ -101,11 +107,7 @@ def main():
             raise ValueError('resume and checkpoint cannot both be specified')
         args.checkpoint = args.output_dir
 
-    dataset_hparams_dict = {}
     model_hparams_dict = {}
-    if dataset_hparams_file:
-        with open(dataset_hparams_file) as f:
-            dataset_hparams_dict.update(json.loads(f.read()))
     if model_hparams_file:
         with open(model_hparams_file) as f:
             model_hparams_dict.update(json.loads(f.read()))
@@ -121,11 +123,6 @@ def main():
             args.dataset = args.dataset or options['dataset']
             args.model = args.model or options['model']
         try:
-            with open(os.path.join(checkpoint_dir, "dataset_hparams.json")) as f:
-                dataset_hparams_dict.update(json.loads(f.read()))
-        except FileNotFoundError:
-            print("dataset_hparams.json was not loaded because it does not exist")
-        try:
             with open(os.path.join(checkpoint_dir, "model_hparams.json")) as f:
                 model_hparams_dict.update(json.loads(f.read()))
                 model_hparams_dict.pop('num_gpus', None)  # backwards-compatibility
@@ -138,13 +135,41 @@ def main():
     print('------------------------------------- End --------------------------------------')
 
 
+    if isinstance(args.dataset, list):
+        dataset_hparams_dicts = [{} for _ in range(len(args.dataset))]
+        for hparams_dict, params_file in zip(dataset_hparams_dicts, dataset_hparams_file):
+            with open(params_file) as f:
+                hparams_dict.update(json.loads(f.read()))
 
-    VideoDataset = datasets.get_dataset_class(args.dataset)
-    train_datasets = [VideoDataset(input_dir, mode='train', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
-                      for input_dir in args.input_dirs]
-    val_input_dirs = args.val_input_dirs or args.input_dirs
-    val_datasets = [VideoDataset(val_input_dir, mode='val', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
-                    for val_input_dir in val_input_dirs]
+        train_datasets, val_datasets = [], []
+        val_input_dirs = args.val_input_dirs or args.input_dirs
+
+        for dataset, hparams_dict, hparams_override, input_dir, val_input_dir in zip(args.dataset, dataset_hparams_dicts,
+                                                                                     args.dataset_hparams, args.input_dirs,
+                                                                                     val_input_dirs):
+            VideoDataset = datasets.get_dataset_class(dataset)
+            train_datasets.append(VideoDataset(input_dir, mode='train',
+                                              hparams_dict=hparams_dict, hparams=hparams_override))
+            val_datasets.append(VideoDataset(val_input_dir, mode='val', hparams_dict=hparams_dict,
+                                             hparams=hparams_override))
+    else:
+        dataset_hparams_dict = {}
+        if dataset_hparams_file:
+            with open(dataset_hparams_file) as f:
+                dataset_hparams_dict.update(json.loads(f.read()))
+        if args.checkpoint:
+            try:
+                with open(os.path.join(checkpoint_dir, "dataset_hparams.json")) as f:
+                    dataset_hparams_dict.update(json.loads(f.read()))
+            except FileNotFoundError:
+                print("dataset_hparams.json was not loaded because it does not exist")
+
+        VideoDataset = datasets.get_dataset_class(args.dataset)
+        train_datasets = [VideoDataset(input_dir, mode='train', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
+                          for input_dir in args.input_dirs]
+        val_input_dirs = args.val_input_dirs or args.input_dirs
+        val_datasets = [VideoDataset(val_input_dir, mode='val', hparams_dict=dataset_hparams_dict, hparams=args.dataset_hparams)
+                        for val_input_dir in val_input_dirs]
     # if len(val_input_dirs) > 1:
     #     if isinstance(val_datasets[-1], datasets.KTHVideoDataset):
     #         val_datasets[-1].set_sequence_length(40)

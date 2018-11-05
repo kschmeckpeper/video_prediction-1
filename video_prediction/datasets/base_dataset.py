@@ -7,7 +7,7 @@ from collections import OrderedDict
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.training import HParams
-
+import pdb
 
 class BaseVideoDataset(object):
     def __init__(self, input_dir, mode='train', num_epochs=None, seed=None,
@@ -80,6 +80,7 @@ class BaseVideoDataset(object):
         hparams = dict(
             crop_size=0,
             scale_size=0,
+            rect_resize=[0,0],
             context_frames=1,
             sequence_length=0,
             frame_skip=0,
@@ -155,9 +156,21 @@ class BaseVideoDataset(object):
             else:
                 image = tf.decode_raw(image_buffer, tf.uint8)
             image = tf.reshape(image, image_shape)
+            rect_resize = self.hparams.rect_resize
             crop_size = self.hparams.crop_size
             scale_size = self.hparams.scale_size
-            if crop_size or scale_size:
+            if sum(rect_resize):
+                crop_image = tf.image.resize_image_with_crop_or_pad(image, rect_resize[0], rect_resize[1])
+                if scale_size:
+                    scale_factor = scale_size / rect_resize[1]
+                    new_size = [int(r * scale_factor) for r in rect_resize]
+                    if scale_factor > 1:
+                        image = tf.image.resize_images(image, new_size, method=tf.image.ResizeMethod.BILINEAR)
+                    else:
+                        image = tf.image.resize_images(image, new_size, method=tf.image.ResizeMethod.AREA)
+                else:
+                    image = crop_image
+            elif crop_size or scale_size:
                 if not crop_size:
                     crop_size = min(image_shape[0], image_shape[1])
                 image = tf.image.resize_image_with_crop_or_pad(image, crop_size, crop_size)
@@ -252,6 +265,7 @@ class VideoDataset(BaseVideoDataset):
         else:
             example = next(tf.python_io.tf_record_iterator(self.filenames[0]))
         self._dict_message = MessageToDict(tf.train.Example.FromString(example))
+
         for example_name, name_and_shape in (list(state_like_names_and_shapes.items()) +
                                              list(action_like_names_and_shapes.items())):
             name, shape = name_and_shape
