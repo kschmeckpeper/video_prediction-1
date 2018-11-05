@@ -63,8 +63,10 @@ def main():
     args = parser.parse_args()
     if len(args.dataset) == 1:
         args.dataset = args.dataset[0]
-        args.dataset_hparams = args.dataset_hparams[0]
-        args.dataset_hparams_dict = args.dataset_hparams_dict[0]
+        if args.dataset_hparams is not None:
+            args.dataset_hparams = args.dataset_hparams[0]
+        if args.dataset_hparams_dict is not None:
+            args.dataset_hparams_dict = args.dataset_hparams_dict[0]
     else:
         assert len(args.dataset) == len(args.dataset_hparams_dict) and len(args.dataset) == len(args.dataset_hparams_dict)
 
@@ -75,9 +77,11 @@ def main():
         np.random.seed(args.seed)
         random.seed(args.seed)
 
-    if args.conf != '':
+    if args.conf != '' and not isinstance(args.dataset, list):
         dataset_hparams_file = args.conf + '/dataset_hparams.json'
         model_hparams_file = args.conf + '/model_hparams.json'
+    elif args.conf != '':
+        raise NotImplementedError("args.conf only supported with one dataset!")
     else:
         dataset_hparams_file = args.dataset_hparams_dict
         model_hparams_file = args.model_hparams_dict

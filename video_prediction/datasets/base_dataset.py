@@ -88,6 +88,8 @@ class BaseVideoDataset(object):
             force_time_shift=False,
             use_state=False,
             compressed=False,
+            random_transform=False,                                                    # projections only occur if true
+            proj_samples_params=[[1.,0.,0.,0.,1.,0.,0.,0.], [0.,0.,0.,0.,0.,0.,0.,0.]] # mean std of random transforms
         )
         return hparams
 
@@ -364,8 +366,24 @@ class VideoDataset(BaseVideoDataset):
 
         state_like_seqs, action_like_seqs = \
             self.slice_sequences(state_like_seqs, action_like_seqs, self._max_sequence_length)
+
+        if 'images' in state_like_seqs:
+            state_like_seqs['images'] = self._random_projections(state_like_seqs['images'])
+
         return state_like_seqs, action_like_seqs
 
+    def _random_projections(self, video):
+        """
+        Applies random projective transformation to video stream of images
+        :param video: tensor of [T, H, W, 3] images
+        :return: projected video stream (if random_transform is True) or original stream
+        """
+        if self.hparams.random_transform:
+            mean, std = [np.array(i) for i in self.hparams.proj_samples_params]
+            random_transform = mean + std * tf.random_normal([8])
+            return tf.contrib.image.transform(video, random_transform, interpolation='BILINEAR',
+                                              name='random_projection')
+        return video
 
 class SequenceExampleVideoDataset(BaseVideoDataset):
     """
