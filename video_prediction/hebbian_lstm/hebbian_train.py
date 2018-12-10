@@ -70,9 +70,15 @@ def main():
     gtruth_pl = tf.placeholder(tf.float32, [batch_size, T, out_dim])
     outputs = make_mini_lstm(inputs_pl)
 
+
+
     loss = tf.reduce_mean(tf.square(gtruth_pl - outputs))
     g_optimizer = tf.train.AdamOptimizer(learning_rate)
     train_op = g_optimizer.minimize(loss)
+
+    # vars = tf.trainable_variables()
+    # g_gradvars = g_optimizer.compute_gradients(loss, var_list=vars)
+    # train_op = g_optimizer.apply_gradients(g_gradvars)  # also increments global_step
 
     num_iter = 10000
 

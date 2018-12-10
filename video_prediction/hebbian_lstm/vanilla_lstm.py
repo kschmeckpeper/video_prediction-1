@@ -10,6 +10,8 @@ from tensorflow.python.ops import variable_scope as vs
 
 from video_prediction.ops import dense
 
+import pdb
+
 class SimpleLSTMCell(rnn_cell_impl.RNNCell):
     """LSTM cell with (optional) normalization and recurrent dropout.
 
@@ -115,6 +117,9 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
 
     def call(self, inputs, state):
         """2D Convolutional LSTM cell with (optional) normalization and recurrent dropout."""
+
+        pdb.set_trace()
+
         c, h = state
         args = array_ops.concat([inputs, h], -1)
         concat = self._dense(args)
@@ -142,4 +147,6 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
             new_h = array_ops.concat([new_h, inputs], axis=-1)
 
         new_state = rnn_cell_impl.LSTMStateTuple(new_c, new_h)
+
+        pdb.set_trace()
         return new_h, new_state
