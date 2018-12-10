@@ -29,15 +29,16 @@ FLAGS_ = flags.FLAGS
 flags.DEFINE_string('hyper', '', 'hyperparameters configuration file')
 
 T = 30
-NDATA= 10000
+NTRAIN = 10000
+NVAL = 1000
 
 def create_sine_data():
 
 
-    inputs = np.zeros([NDATA, T])
-    targets = np.zeros([NDATA, T])
+    inputs = np.zeros([NTRAIN + NVAL, T])
+    targets = np.zeros([NTRAIN + NVAL, T])
 
-    for i in range(NDATA):
+    for i in range(NTRAIN + NVAL):
         amp = np.random.random() * 10 - 5
 
         ph = 1 * np.random.random() * np.pi/2 + 1
@@ -54,8 +55,11 @@ def create_sine_data():
         # plt.plot(inputs[i], targets[i])
         # plt.show()
 
-    dict = {'inputs':inputs, 'targets': targets}
-    pickle.dump(dict, open('toy_data/sine.pkl', 'wb'))
+    dict = {'inputs':inputs[:NTRAIN], 'targets': targets[:NTRAIN]}
+    pickle.dump(dict, open('toy_data/sine_train.pkl', 'wb'))
+
+    dict = {'inputs':inputs[NTRAIN:], 'targets': targets[NTRAIN:]}
+    pickle.dump(dict, open('toy_data/sine_val.pkl', 'wb'))
 
 
 def main():
@@ -64,40 +68,50 @@ def main():
     inp_dim = 1
     out_dim = 1
 
+    xvals_pl = tf.placeholder(tf.float32, [batch_size, T, inp_dim])
+    yvals_gtruth_pl = tf.placeholder(tf.float32, [batch_size, T, out_dim])
+    outputs = make_mini_lstm(xvals_pl, yvals_gtruth_pl, batch_size, T)
+
+    loss = tf.reduce_mean(tf.square(yvals_gtruth_pl - outputs))
+
+    trainsum = tf.summary.scalar('trainloss', loss)
+    valsum = tf.summary.scalar('valloss', loss)
+
     learning_rate = 1e-3
-
-    inputs_pl = tf.placeholder(tf.float32, [batch_size, T, inp_dim])
-    gtruth_pl = tf.placeholder(tf.float32, [batch_size, T, out_dim])
-    outputs = make_mini_lstm(inputs_pl)
-
-    vars = tf.trainable_variables()
-    pdb.set_trace()
-
-    loss = tf.reduce_mean(tf.square(gtruth_pl - outputs))
     g_optimizer = tf.train.AdamOptimizer(learning_rate)
     train_op = g_optimizer.minimize(loss)
 
     # g_gradvars = g_optimizer.compute_gradients(loss, var_list=vars)
     # train_op = g_optimizer.apply_gradients(g_gradvars)  # also increments global_step
 
-    num_iter = 10000
-
-
     ### load data
-    dict = pickle.load(open('toy_data/sine.pkl', "rb"))
-
+    train_dict = pickle.load(open('toy_data/sine_train.pkl', "rb"))
+    val_dict = pickle.load(open('toy_data/sine_val.pkl', "rb"))
 
     sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
 
+    summary_writer = tf.summary.FileWriter('plots/', graph=sess.graph, flush_secs=10)
+
+    num_iter = 10000
     for itr in range(num_iter):
         # Generate new batch of data_files.
 
-        ind = np.random.choice(np.arange(NDATA), batch_size)
-        feed_dict = {inputs_pl:dict['inputs'][ind], gtruth_pl:dict['targets'][ind]}
-        cost, _ = sess.run([loss, train_op], feed_dict)
+        ind = np.random.choice(np.arange(NTRAIN), batch_size)
+        feed_dict = {xvals_pl:train_dict['inputs'][ind][...,None], yvals_gtruth_pl:train_dict['targets'][ind][...,None]}
+        cost, _, train_summ_str = sess.run([loss, train_op, trainsum], feed_dict)
 
         if (itr) % 10 ==0:
-            tf.logging.info(str(itr) + ' ' + str(cost))
+            print(str(itr) + ' ' + str(cost))
+            summary_writer.add_summary(train_summ_str, itr)
+
+        if (itr) % 100 ==0:
+            ind = np.random.choice(np.arange(NVAL), batch_size)
+            feed_dict = {xvals_pl:val_dict['inputs'][ind][...,None], yvals_gtruth_pl:val_dict['targets'][ind][...,None]}
+            cost, outputs_vals, val_summ_str = sess.run([loss, outputs, valsum], feed_dict)
+            plot(itr, outputs_vals, val_dict['inputs'][ind], val_dict['targets'][ind])
+
+            summary_writer.add_summary(val_summ_str, itr)
 
         # if (itr) % VAL_INTERVAL == 0:
         #     # Run through validation set.
@@ -113,6 +127,20 @@ def main():
         # if (itr) % SUMMARY_INTERVAL == 2:
         #     summary_writer.add_summary(summary_str, itr)
 
+
+def plot(itr, outputs, inputs, gtruth):
+
+    outputs = outputs.squeeze()
+    inputs = inputs.squeeze()
+    gtruth = gtruth.squeeze()
+
+    for i in range(3):
+        plt.figure()
+        plt.plot(inputs[i], outputs[i])
+        plt.plot(inputs[i], gtruth[i])
+        plt.savefig('plots/sine_itr{}_ex{}.png'.format(itr, i))
+        plt.close()
+
 if __name__ == '__main__':
-    # create_sine_data()
+    create_sine_data()
     main()

@@ -99,9 +99,15 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
         return normalized
 
     def _dense(self, inputs):
-        pdb.set_trace()
+        # pdb.set_trace()
         n_out = 4 * self._num_outputs
-        return dense(inputs, n_out)
+        with tf.variable_scope('dense'):
+            input_shape = inputs.get_shape().as_list()
+            weights_shape = [input_shape[1], n_out]
+            weights= tf.get_variable('weights', weights_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+            bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.zeros_initializer())
+            outputs = tf.matmul(inputs, weights) + bias
+            return outputs
 
     # def _conv2d(self, inputs):
     #     output_filters = 4 * self._num_outputs
@@ -120,8 +126,7 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
         """2D Convolutional LSTM cell with (optional) normalization and recurrent dropout."""
         c, h = state
         args = array_ops.concat([inputs, h], -1)
-        # concat = self._dense(args)
-        concat = tf.concat([args, args], 1)
+        concat = self._dense(args)
 
         if self._normalizer_fn and not self._separate_norms:
             concat = self._norm(concat, "input_transform_forget_output")

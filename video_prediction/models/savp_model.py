@@ -376,6 +376,8 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
             t = tf.to_int32(tf.identity(time[0]))
 
         image = tf.where(self.ground_truth[t], inputs['images'], states['gen_image'])  # schedule sampling (if any)
+        pdb.set_trace()
+
         last_images = states['last_images'][1:] + [image]
         if 'pix_distribs' in inputs:
             pix_distrib = tf.where(self.ground_truth[t], inputs['pix_distribs'], states['gen_pix_distrib'])
