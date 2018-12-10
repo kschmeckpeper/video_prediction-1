@@ -1,7 +1,7 @@
 CUDA_VISIBLE_DEVICES=0 python scripts/train.py --train_batch_sizes 8 8 \
  --input_dir \
- $VMPC_DATA_DIR/sawyer_data/ag_long_records/good \
- $VMPC_DATA_DIR/sawyer_data/ag_long_records/bad \
+ $VMPC_DATA_DIR/sawyer_grasping/ag_long_records/good \
+ $VMPC_DATA_DIR/sawyer_grasping/ag_long_records/bad \
  --dataset sawyer --model savp \
   --model_hparams_dict pretrained_models/sawyer_robot/autograsp_env_long/model_hparams.json \
   --dataset_hparams_dict pretrained_models/sawyer_robot/autograsp_env_long/dataset_hparams.json \
