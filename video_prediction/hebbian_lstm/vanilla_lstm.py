@@ -99,6 +99,7 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
         return normalized
 
     def _dense(self, inputs):
+        pdb.set_trace()
         n_out = 4 * self._num_outputs
         return dense(inputs, n_out)
 
@@ -117,12 +118,10 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
 
     def call(self, inputs, state):
         """2D Convolutional LSTM cell with (optional) normalization and recurrent dropout."""
-
-        pdb.set_trace()
-
         c, h = state
         args = array_ops.concat([inputs, h], -1)
-        concat = self._dense(args)
+        # concat = self._dense(args)
+        concat = tf.concat([args, args], 1)
 
         if self._normalizer_fn and not self._separate_norms:
             concat = self._norm(concat, "input_transform_forget_output")
@@ -148,5 +147,4 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
 
         new_state = rnn_cell_impl.LSTMStateTuple(new_c, new_h)
 
-        pdb.set_trace()
         return new_h, new_state

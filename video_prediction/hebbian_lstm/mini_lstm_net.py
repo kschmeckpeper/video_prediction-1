@@ -38,12 +38,23 @@ class CustomCell(tf.nn.rnn_cell.RNNCell):
 
         return dense(h2, 1), new_state
 
+#
+# def make_mini_lstm(inputs, hparams=None):
+#
+#     cell = CustomCell(inputs, hparams)
+#     inputs = tf.transpose(inputs, [1,0,2])
+#     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
+#                                    swap_memory=False, time_major=True)
+#     outputs = tf.transpose(inputs, [1,0,2])
+#     return outputs
 
 def make_mini_lstm(inputs, hparams=None):
 
-    cell = CustomCell(inputs, hparams)
+
+    simplelstmcell = SimpleLSTMCell(1, 1)
+
     inputs = tf.transpose(inputs, [1,0,2])
-    outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
+    outputs, _ = tf.nn.dynamic_rnn(simplelstmcell, inputs, dtype=tf.float32,
                                    swap_memory=False, time_major=True)
     outputs = tf.transpose(inputs, [1,0,2])
     return outputs

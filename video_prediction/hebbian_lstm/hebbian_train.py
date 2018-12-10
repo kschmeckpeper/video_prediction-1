@@ -70,13 +70,13 @@ def main():
     gtruth_pl = tf.placeholder(tf.float32, [batch_size, T, out_dim])
     outputs = make_mini_lstm(inputs_pl)
 
-
+    vars = tf.trainable_variables()
+    pdb.set_trace()
 
     loss = tf.reduce_mean(tf.square(gtruth_pl - outputs))
     g_optimizer = tf.train.AdamOptimizer(learning_rate)
     train_op = g_optimizer.minimize(loss)
 
-    # vars = tf.trainable_variables()
     # g_gradvars = g_optimizer.compute_gradients(loss, var_list=vars)
     # train_op = g_optimizer.apply_gradients(g_gradvars)  # also increments global_step
 
@@ -94,7 +94,7 @@ def main():
 
         ind = np.random.choice(np.arange(NDATA), batch_size)
         feed_dict = {inputs_pl:dict['inputs'][ind], gtruth_pl:dict['targets'][ind]}
-        cost, _, summary_str = sess.run([loss, train_op], feed_dict)
+        cost, _ = sess.run([loss, train_op], feed_dict)
 
         if (itr) % 10 ==0:
             tf.logging.info(str(itr) + ' ' + str(cost))
