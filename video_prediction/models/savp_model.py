@@ -438,6 +438,8 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                         conv_rnn_h = tile_concat([_h, state_action_z[:, None, None, :]], axis=-1)
                     else:
                         conv_rnn_h = _h
+
+                    # pdb.set_trace()
                     conv_rnn_h, conv_rnn_state = self._conv_rnn_func(conv_rnn_h, conv_rnn_state, out_channels)
                 new_conv_rnn_states.append(conv_rnn_state)
             layers.append((_h, conv_rnn_h) if use_conv_rnn else (_h,))
