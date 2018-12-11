@@ -5,23 +5,25 @@ from video_prediction.ops import dense
 from video_prediction.hebbian_lstm.vanilla_lstm import SimpleLSTMCell
 
 
+from video_prediction.hebbian_lstm.vanilla_gru import SimpleGRUCell
 
-class CustomCell(tf.nn.rnn_cell.RNNCell):
+
+class CustomLSTMwrapCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, batch_size, inputs, context_frames, reuse=None):
-        super(CustomCell, self).__init__(_reuse=reuse)
+        super(CustomLSTMwrapCell, self).__init__(_reuse=reuse)
 
         self.inputs = inputs
         self._output_size = tf.TensorShape(1)
 
-        self._state_size = tf.nn.rnn_cell.LSTMStateTuple(tf.TensorShape(100), tf.TensorShape(100))
+        self.nlstm = nlstm = 100
         self._state_size  = {'t': tf.TensorShape([]),
                               'gen_outputs': tf.TensorShape(1),
-                              'lstm_states': tf.nn.rnn_cell.LSTMStateTuple(tf.TensorShape(100), tf.TensorShape(100))}
+                              'lstm_states': tf.nn.rnn_cell.LSTMStateTuple(tf.TensorShape(nlstm), tf.TensorShape(nlstm))}
 
         ## scheduled sampling
         # ground_truth_sampling_shape = [self.hparams.sequence_length - 1 - self.hparams.context_frames, batch_size]
         #
-        # k = 1000
+        # k = nlstm0
         # iter_num = tf.to_float(tf.train.get_or_create_global_step())
         # prob = (k / (k + tf.exp((iter_num) / k)))
         # prob = tf.cond(tf.less(iter_num, 0), lambda: 1.0, lambda: prob)
@@ -40,7 +42,7 @@ class CustomCell(tf.nn.rnn_cell.RNNCell):
                                        tf.constant(False, dtype=tf.bool, shape=[context_frames, batch_size])], axis=0)
 
     def zero_state(self, batch_size, dtype):
-        init_state = super(CustomCell, self).zero_state(batch_size, dtype)
+        init_state = super(CustomLSTMwrapCell, self).zero_state(batch_size, dtype)
         return init_state
 
     @property
@@ -63,17 +65,15 @@ class CustomCell(tf.nn.rnn_cell.RNNCell):
         t = tf.to_int32(time[0])
         y_vals = tf.where(self.ground_truth[t], y_gtruth, gen_outputs)  # schedule sampling (if any)
 
-        ndense = 100
         with tf.variable_scope('h1'):
-            h1 = dense(tf.concat([x_vals, y_vals], axis=1), ndense)
+            h1 = dense(tf.concat([x_vals, y_vals], axis=1), self.nlstm)
 
-        simplelstmcell = SimpleLSTMCell(ndense, ndense)
+        simplelstmcell = SimpleLSTMCell(self.nlstm, self.nlstm)
 
         with tf.variable_scope('h2'):
             h2, new_lstm_state = simplelstmcell(h1, lstm_states)
 
         gen_outputs = dense(h2, 1,)
-
         new_states = {'t': time + 1,
                       'gen_outputs': gen_outputs,
                       'lstm_states': new_lstm_state}
@@ -82,24 +82,23 @@ class CustomCell(tf.nn.rnn_cell.RNNCell):
 
 
 
-class HebbianCell(tf.nn.rnn_cell.RNNCell):
+class CustomGRUwrapCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, batch_size, inputs, context_frames, reuse=None):
-        super(HebbianCell, self).__init__(_reuse=reuse)
+        super(CustomGRUwrapCell, self).__init__(_reuse=reuse)
 
         self.inputs = inputs
         self._output_size = tf.TensorShape(1)
 
-        self._state_size = tf.nn.rnn_cell.LSTMStateTuple(tf.TensorShape(100), tf.TensorShape(100))
+        self.nlstm = nlstm = 100
         self._state_size  = {'t': tf.TensorShape([]),
-                             'gen_outputs': tf.TensorShape(1),
-                             'hebb': tf.TensorShape(100),
-                             'lstm_states': tf.nn.rnn_cell.LSTMStateTuple(tf.TensorShape(100), tf.TensorShape(100))}
+                              'gen_outputs': tf.TensorShape(1),
+                              'lstm_states': tf.TensorShape(nlstm)}
 
         self.ground_truth = tf.concat([tf.constant(True, dtype=tf.bool, shape=[context_frames, batch_size]),
                                        tf.constant(False, dtype=tf.bool, shape=[context_frames, batch_size])], axis=0)
 
     def zero_state(self, batch_size, dtype):
-        init_state = super(HebbianCell, self).zero_state(batch_size, dtype)
+        init_state = super(CustomGRUwrapCell, self).zero_state(batch_size, dtype)
         return init_state
 
     @property
@@ -118,22 +117,19 @@ class HebbianCell(tf.nn.rnn_cell.RNNCell):
         gen_outputs = state['gen_outputs']
         time = state['t']
         lstm_states = state['lstm_states']
-        hebb = state['hebb']
 
         t = tf.to_int32(time[0])
         y_vals = tf.where(self.ground_truth[t], y_gtruth, gen_outputs)  # schedule sampling (if any)
 
-        ndense = 100
         with tf.variable_scope('h1'):
-            h1 = dense(tf.concat([x_vals, y_vals], axis=1), ndense)
+            h1 = dense(tf.concat([x_vals, y_vals], axis=1), self.nlstm)
 
-        simplelstmcell = SimpleLSTMCell(ndense, ndense)
+        simplelstmcell = SimpleGRUCell(self.nlstm, self.nlstm)
 
         with tf.variable_scope('h2'):
             h2, new_lstm_state = simplelstmcell(h1, lstm_states)
 
         gen_outputs = dense(h2, 1,)
-
         new_states = {'t': time + 1,
                       'gen_outputs': gen_outputs,
                       'lstm_states': new_lstm_state}
@@ -141,12 +137,16 @@ class HebbianCell(tf.nn.rnn_cell.RNNCell):
         return gen_outputs, new_states
 
 
-
-
-
 def make_mini_lstm(x_vals, y_gtruth, batch_size, T):
 
-    cell = CustomCell(batch_size, x_vals, T // 2)
+    type = 'GRU'
+    if type == 'LSTM':
+        cell = CustomLSTMwrapCell(batch_size, x_vals, T // 2)
+    elif type == 'GRU':
+        cell = CustomGRUwrapCell(batch_size, x_vals, T // 2)
+    else:
+        raise NotImplementedError
+
     x_vals = tf.transpose(x_vals, [1, 0, 2])
     y_gtruth = tf.transpose(y_gtruth, [1, 0, 2])
 

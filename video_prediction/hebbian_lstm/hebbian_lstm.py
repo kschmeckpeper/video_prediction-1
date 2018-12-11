@@ -8,15 +8,19 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import rnn_cell_impl
 from tensorflow.python.ops import variable_scope as vs
 
-class BasicConv2DLSTMCell(rnn_cell_impl.RNNCell):
-    """2D Convolutional LSTM cell with (optional) normalization and recurrent dropout.
+from video_prediction.ops import dense
+
+import pdb
+
+class SimpleLSTMCell(rnn_cell_impl.RNNCell):
+    """LSTM cell with (optional) normalization and recurrent dropout.
 
     The implementation is based on: tf.contrib.rnn.LayerNormBasicLSTMCell.
 
     It does not allow cell clipping, a projection layer, and does not
     use peep-hole connections: it is the basic baseline.
     """
-    def __init__(self, input_shape, filters, kernel_size,
+    def __init__(self, input_shape, num_outputs=None, kernel_size=None,
                  forget_bias=1.0, activation_fn=math_ops.tanh,
                  normalizer_fn=None, separate_norms=True,
                  norm_gain=1.0, norm_shift=0.0,
@@ -26,7 +30,7 @@ class BasicConv2DLSTMCell(rnn_cell_impl.RNNCell):
 
         Args:
             input_shape: int tuple, Shape of the input, excluding the batch size.
-            filters: int, The number of filters of the conv LSTM cell.
+            num_outputs: int, The number of filters of the conv LSTM cell.
             kernel_size: int tuple, The kernel size of the conv LSTM cell.
             forget_bias: float, The bias added to forget gates (see above).
             activation_fn: Activation function of the inner states.
@@ -51,10 +55,10 @@ class BasicConv2DLSTMCell(rnn_cell_impl.RNNCell):
                 in an existing scope.  If not `True`, and the existing scope already has
                 the given variables, an error is raised.
         """
-        super(BasicConv2DLSTMCell, self).__init__(_reuse=reuse)
+        super(SimpleLSTMCell, self).__init__(_reuse=reuse)
 
         self._input_shape = input_shape
-        self._filters = filters
+        self._num_outputs = num_outputs
         self._kernel_size = list(kernel_size) if isinstance(kernel_size, (tuple, list)) else [kernel_size] * 2
         self._forget_bias = forget_bias
         self._activation_fn = activation_fn
@@ -68,11 +72,11 @@ class BasicConv2DLSTMCell(rnn_cell_impl.RNNCell):
         self._reuse = reuse
 
         if self._skip_connection:
-            output_channels = self._filters + self._input_shape[-1]
+            output_channels = self._num_outputs + self._input_shape[-1]
         else:
-            output_channels = self._filters
-        cell_size = tensor_shape.TensorShape(self._input_shape[:-1] + [self._filters])
-        self._output_size = tensor_shape.TensorShape(self._input_shape[:-1] + [output_channels])
+            output_channels = self._num_outputs
+        cell_size = tensor_shape.TensorShape(self._input_shape)
+        self._output_size = tensor_shape.TensorShape(num_outputs)
         self._state_size = rnn_cell_impl.LSTMStateTuple(cell_size, self._output_size)
 
     @property
@@ -94,24 +98,23 @@ class BasicConv2DLSTMCell(rnn_cell_impl.RNNCell):
         normalized = self._normalizer_fn(inputs, reuse=True, scope=scope)
         return normalized
 
-    def _conv2d(self, inputs):
-        output_filters = 4 * self._filters
-        input_shape = inputs.get_shape().as_list()
-        kernel_shape = list(self._kernel_size) + [input_shape[-1], output_filters]
-        kernel = vs.get_variable("kernel", kernel_shape, dtype=dtypes.float32,
-                                 initializer=init_ops.truncated_normal_initializer(stddev=0.02))
-        outputs = nn_ops.conv2d(inputs, kernel, [1] * 4, padding='SAME')
-        if not self._normalizer_fn:
-            bias = vs.get_variable('bias', [output_filters], dtype=dtypes.float32,
-                                   initializer=init_ops.zeros_initializer())
-            outputs = nn_ops.bias_add(outputs, bias)
-        return outputs
+    def _dense(self, inputs):
+        # pdb.set_trace()
+        n_out = 4 * self._num_outputs
+        with tf.variable_scope('dense'):
+            input_shape = inputs.get_shape().as_list()
+            weights_shape = [input_shape[1], n_out]
+            weights = tf.get_variable('weights', weights_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+            bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.zeros_initializer())
+            outputs = tf.matmul(inputs, weights) + bias
+            return outputs
+
 
     def call(self, inputs, state):
         """2D Convolutional LSTM cell with (optional) normalization and recurrent dropout."""
         c, h = state
         args = array_ops.concat([inputs, h], -1)
-        concat = self._conv2d(args)
+        concat = self._dense(args)
 
         if self._normalizer_fn and not self._separate_norms:
             concat = self._norm(concat, "input_transform_forget_output")
@@ -136,4 +139,8 @@ class BasicConv2DLSTMCell(rnn_cell_impl.RNNCell):
             new_h = array_ops.concat([new_h, inputs], axis=-1)
 
         new_state = rnn_cell_impl.LSTMStateTuple(new_c, new_h)
-        return new_h, new_stat
+
+        return new_h, new_state
+
+
+

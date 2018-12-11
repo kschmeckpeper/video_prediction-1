@@ -12,7 +12,8 @@ from video_prediction.ops import dense
 
 import pdb
 
-class SimpleLSTMCell(rnn_cell_impl.RNNCell):
+
+class SimpleGRUCell(rnn_cell_impl.RNNCell):
     """LSTM cell with (optional) normalization and recurrent dropout.
 
     The implementation is based on: tf.contrib.rnn.LayerNormBasicLSTMCell.
@@ -55,7 +56,7 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
                 in an existing scope.  If not `True`, and the existing scope already has
                 the given variables, an error is raised.
         """
-        super(SimpleLSTMCell, self).__init__(_reuse=reuse)
+        super(SimpleGRUCell, self).__init__(_reuse=reuse)
 
         self._input_shape = input_shape
         self._num_outputs = num_outputs
@@ -87,10 +88,11 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
     def state_size(self):
         return self._state_size
 
-    def _norm(self, inputs, scope):
+
+    def _norm(self, inputs, scope, bias_initializer):
         shape = inputs.get_shape()[-1:]
-        gamma_init = init_ops.constant_initializer(self._g)
-        beta_init = init_ops.constant_initializer(self._b)
+        gamma_init = init_ops.ones_initializer()
+        beta_init = bias_initializer
         with vs.variable_scope(scope):
             # Initialize beta and gamma for use by normalizer.
             vs.get_variable("gamma", shape=shape, initializer=gamma_init)
@@ -98,47 +100,51 @@ class SimpleLSTMCell(rnn_cell_impl.RNNCell):
         normalized = self._normalizer_fn(inputs, reuse=True, scope=scope)
         return normalized
 
-    def _dense(self, inputs):
-        n_out = 4 * self._num_outputs
+
+    def _dense(self, inputs, n_out):
         with tf.variable_scope('dense'):
             input_shape = inputs.get_shape().as_list()
             weights_shape = [input_shape[1], n_out]
             weights= tf.get_variable('weights', weights_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
-            bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.zeros_initializer())
+            bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.ones_initializer())
+            # bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.zeros_initializer())
+            outputs = tf.matmul(inputs, weights) + bias
+            return outputs
+
+
+    def _dense(self, inputs, hebb, n_out):
+        with tf.variable_scope('dense'):
+            input_shape = inputs.get_shape().as_list()
+            weights_shape = [input_shape[1], n_out]
+            weights = tf.get_variable('weights', weights_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+            bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.ones_initializer())
+            # bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.zeros_initializer())
             outputs = tf.matmul(inputs, weights) + bias
             return outputs
 
 
     def call(self, inputs, state):
-        """2D Convolutional LSTM cell with (optional) normalization and recurrent dropout."""
-        c, h = state
-        args = array_ops.concat([inputs, h], -1)
-        concat = self._dense(args)
+        bias_ones = init_ops.ones_initializer()
+        with vs.variable_scope('gates'):
+            inputs = array_ops.concat([inputs, state], axis=-1)
+            concat = self._dense(inputs, self._num_outputs*2)
+            if self._normalizer_fn and not self._separate_norms:
+                concat = self._norm(concat, "reset_update", bias_ones)
+            r, u = array_ops.split(concat, 2, axis=-1)
+            if self._normalizer_fn and self._separate_norms:
+                r = self._norm(r, "reset", bias_ones)
+                u = self._norm(u, "update", bias_ones)
+            r, u = math_ops.sigmoid(r), math_ops.sigmoid(u)
 
-        if self._normalizer_fn and not self._separate_norms:
-            concat = self._norm(concat, "input_transform_forget_output")
-        i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=-1)
-        if self._normalizer_fn and self._separate_norms:
-            i = self._norm(i, "input")
-            j = self._norm(j, "transform")
-            f = self._norm(f, "forget")
-            o = self._norm(o, "output")
+        bias_zeros = init_ops.zeros_initializer()
+        with vs.variable_scope('candidate'):
+            inputs = array_ops.concat([inputs, r * state], axis=-1)
 
-        g = self._activation_fn(j)
-        if (not isinstance(self._keep_prob, float)) or self._keep_prob < 1:
-            g = nn_ops.dropout(g, self._keep_prob, seed=self._seed)
+            candidate = self._dense(inputs, self._num_outputs)
 
-        new_c = (c * math_ops.sigmoid(f + self._forget_bias)
-                 + math_ops.sigmoid(i) * g)
-        if self._normalizer_fn:
-            new_c = self._norm(new_c, "state")
-        new_h = self._activation_fn(new_c) * math_ops.sigmoid(o)
+            if self._normalizer_fn:
+                candidate = self._norm(candidate, "state", bias_zeros)
 
-        if self._skip_connection:
-            new_h = array_ops.concat([new_h, inputs], axis=-1)
-
-        new_state = rnn_cell_impl.LSTMStateTuple(new_c, new_h)
-
-        return new_h, new_state
-
-
+        c = self._activation_fn(candidate)
+        new_h = u * state + (1 - u) * c
+        return new_h, new_h

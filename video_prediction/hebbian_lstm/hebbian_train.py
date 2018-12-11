@@ -2,6 +2,7 @@ import os
 import pickle as pkl
 import numpy as np
 import tensorflow as tf
+import argparse
 import imp
 import sys
 import pickle
@@ -63,6 +64,10 @@ def create_sine_data():
 
 
 def main():
+    parser = argparse.ArgumentParser(description='Run benchmarks')
+    parser.add_argument('savedir', type=str)
+    args = parser.parse_args()
+
 
     batch_size = 32
     inp_dim = 1
@@ -109,7 +114,7 @@ def main():
             ind = np.random.choice(np.arange(NVAL), batch_size)
             feed_dict = {xvals_pl:val_dict['inputs'][ind][...,None], yvals_gtruth_pl:val_dict['targets'][ind][...,None]}
             cost, outputs_vals, val_summ_str = sess.run([loss, outputs, valsum], feed_dict)
-            plot(itr, outputs_vals, val_dict['inputs'][ind], val_dict['targets'][ind])
+            plot(itr, outputs_vals, val_dict['inputs'][ind], val_dict['targets'][ind], save_dir=args.savedir)
 
             summary_writer.add_summary(val_summ_str, itr)
 
@@ -128,7 +133,7 @@ def main():
         #     summary_writer.add_summary(summary_str, itr)
 
 
-def plot(itr, outputs, inputs, gtruth):
+def plot(itr, outputs, inputs, gtruth, save_dir):
 
     outputs = outputs.squeeze()
     inputs = inputs.squeeze()
@@ -138,7 +143,7 @@ def plot(itr, outputs, inputs, gtruth):
         plt.figure()
         plt.plot(inputs[i], outputs[i])
         plt.plot(inputs[i], gtruth[i])
-        plt.savefig('plots/sine_itr{}_ex{}.png'.format(itr, i))
+        plt.savefig(save_dir + '/sine_itr{}_ex{}.png'.format(itr, i))
         plt.close()
 
 if __name__ == '__main__':
