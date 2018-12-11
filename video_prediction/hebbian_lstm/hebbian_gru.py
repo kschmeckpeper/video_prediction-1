@@ -13,7 +13,7 @@ from video_prediction.ops import dense
 import pdb
 
 
-class SimpleGRUCell(rnn_cell_impl.RNNCell):
+class HebbianGRUCell(rnn_cell_impl.RNNCell):
     """LSTM cell with (optional) normalization and recurrent dropout.
 
     The implementation is based on: tf.contrib.rnn.LayerNormBasicLSTMCell.
@@ -56,7 +56,8 @@ class SimpleGRUCell(rnn_cell_impl.RNNCell):
                 in an existing scope.  If not `True`, and the existing scope already has
                 the given variables, an error is raised.
         """
-        super(SimpleGRUCell, self).__init__(_reuse=reuse)
+
+        super(HebbianGRUCell, self).__init__(_reuse=reuse)
 
         self._input_shape = input_shape
         self._num_outputs = num_outputs
@@ -78,7 +79,10 @@ class SimpleGRUCell(rnn_cell_impl.RNNCell):
             output_channels = self._num_outputs
         cell_size = tensor_shape.TensorShape(self._input_shape)
         self._output_size = tensor_shape.TensorShape(num_outputs)
-        self._state_size = rnn_cell_impl.LSTMStateTuple(cell_size, self._output_size)
+
+        self._state_size = [tf.TensorShape(self._num_outputs), tf.TensorShape([self._num_outputs, self._num_outputs])]
+
+        print('done')
 
     @property
     def output_size(self):
@@ -93,6 +97,7 @@ class SimpleGRUCell(rnn_cell_impl.RNNCell):
         shape = inputs.get_shape()[-1:]
         gamma_init = init_ops.ones_initializer()
         beta_init = bias_initializer
+        pdb.set_trace()
         with vs.variable_scope(scope):
             # Initialize beta and gamma for use by normalizer.
             vs.get_variable("gamma", shape=shape, initializer=gamma_init)
@@ -112,39 +117,48 @@ class SimpleGRUCell(rnn_cell_impl.RNNCell):
             return outputs
 
 
-    def _dense(self, inputs, hebb, n_out):
-        with tf.variable_scope('dense'):
-            input_shape = inputs.get_shape().as_list()
-            weights_shape = [input_shape[1], n_out]
-            weights = tf.get_variable('weights', weights_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
-            bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.ones_initializer())
-            # bias = tf.get_variable('bias', [n_out], dtype=tf.float32, initializer=tf.zeros_initializer())
-            outputs = tf.matmul(inputs, weights) + bias
-            return outputs
+    def call(self, inputs, state_hebb):
+        state, hebb = state_hebb
 
-
-    def call(self, inputs, state):
         bias_ones = init_ops.ones_initializer()
         with vs.variable_scope('gates'):
-            inputs = array_ops.concat([inputs, state], axis=-1)
-            concat = self._dense(inputs, self._num_outputs*2)
+            inputs_state = array_ops.concat([inputs, state], axis=-1)
+            concat = self._dense(inputs_state, self._num_outputs*2)
             if self._normalizer_fn and not self._separate_norms:
                 concat = self._norm(concat, "reset_update", bias_ones)
-            r, u = array_ops.split(concat, 2, axis=-1)
+            r_, u_ = array_ops.split(concat, 2, axis=-1)
             if self._normalizer_fn and self._separate_norms:
-                r = self._norm(r, "reset", bias_ones)
-                u = self._norm(u, "update", bias_ones)
-            r, u = math_ops.sigmoid(r), math_ops.sigmoid(u)
+                r_ = self._norm(r_, "reset", bias_ones)
+                u_ = self._norm(u_, "update", bias_ones)
+            r_, u_ = math_ops.sigmoid(r_), math_ops.sigmoid(u_)
 
         bias_zeros = init_ops.zeros_initializer()
         with vs.variable_scope('candidate'):
-            inputs = array_ops.concat([inputs, r * state], axis=-1)
 
-            candidate = self._dense(inputs, self._num_outputs)
+            input_shape = inputs.get_shape()
+            weights_shape = [input_shape[1], self._num_outputs]
+            weights= tf.get_variable('weights_h', weights_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+            alpha = tf.get_variable('alpha', [input_shape[1], input_shape[1]], dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+            # one way of using the hebbian matrix, there might be others
+
+            r_state = tf.expand_dims(r_ * state, 1)
+
+            candidate = self._dense(inputs, self._num_outputs) + tf.squeeze(tf.matmul(r_state, weights[None] + hebb * alpha[None]))
 
             if self._normalizer_fn:
                 candidate = self._norm(candidate, "state", bias_zeros)
 
-        c = self._activation_fn(candidate)
-        new_h = u * state + (1 - u) * c
-        return new_h, new_h
+        c_ = self._activation_fn(candidate)
+        new_h = u_ * state + (1 - u_) * c_
+
+        # hebbian update according to backpropamine
+        # eta_hebb_old = tf.get_variable('eta_hebb_old', [1], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
+        # pred_eta = tf.get_variable('pred_eta',  [input_shape[1], input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
+        # pred_eta_b = tf.get_variable('pred_b',  [input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
+        # eta_hat = tf.sigmoid(tf.matmul(candidate[:,None], pred_eta) + pred_eta_b)
+
+        eta = tf.get_variable('eta',  [input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
+
+        new_hebb = (1-eta)* hebb + eta*tf.matmul(state[:,:,None], candidate[:,None])
+
+        return new_h, new_hebb

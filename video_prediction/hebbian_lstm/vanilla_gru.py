@@ -115,8 +115,8 @@ class SimpleGRUCell(rnn_cell_impl.RNNCell):
     def call(self, inputs, state):
         bias_ones = init_ops.ones_initializer()
         with vs.variable_scope('gates'):
-            inputs = array_ops.concat([inputs, state], axis=-1)
-            concat = self._dense(inputs, self._num_outputs*2)
+            inputs_state = array_ops.concat([inputs, state], axis=-1)
+            concat = self._dense(inputs_state, self._num_outputs*2)
             if self._normalizer_fn and not self._separate_norms:
                 concat = self._norm(concat, "reset_update", bias_ones)
             r, u = array_ops.split(concat, 2, axis=-1)
@@ -127,8 +127,8 @@ class SimpleGRUCell(rnn_cell_impl.RNNCell):
 
         bias_zeros = init_ops.zeros_initializer()
         with vs.variable_scope('candidate'):
-            inputs = array_ops.concat([inputs, r * state], axis=-1)
-            candidate = self._dense(inputs, self._num_outputs)
+            inputs_r = array_ops.concat([inputs, r * state], axis=-1)
+            candidate = self._dense(inputs_r, self._num_outputs)
             if self._normalizer_fn:
                 candidate = self._norm(candidate, "state", bias_zeros)
 

@@ -6,6 +6,7 @@ from video_prediction.hebbian_lstm.vanilla_lstm import SimpleLSTMCell
 
 
 from video_prediction.hebbian_lstm.vanilla_gru import SimpleGRUCell
+from video_prediction.hebbian_lstm.hebbian_gru import HebbianGRUCell
 
 
 class CustomLSTMwrapCell(tf.nn.rnn_cell.RNNCell):
@@ -92,7 +93,15 @@ class CustomGRUwrapCell(tf.nn.rnn_cell.RNNCell):
         self.nlstm = nlstm = 100
         self._state_size  = {'t': tf.TensorShape([]),
                               'gen_outputs': tf.TensorShape(1),
-                              'lstm_states': tf.TensorShape(nlstm)}
+                              }   # size lstmstates, size hebbian
+
+
+        self.use_hebb = True
+        if self.use_hebb:
+            rnn_state_size = [tf.TensorShape(nlstm), tf.TensorShape([nlstm, nlstm])]
+        else:
+            rnn_state_size = [tf.TensorShape(nlstm)]
+        self._state_size['lstm_states'] = rnn_state_size
 
         self.ground_truth = tf.concat([tf.constant(True, dtype=tf.bool, shape=[context_frames, batch_size]),
                                        tf.constant(False, dtype=tf.bool, shape=[context_frames, batch_size])], axis=0)
@@ -124,16 +133,32 @@ class CustomGRUwrapCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope('h1'):
             h1 = dense(tf.concat([x_vals, y_vals], axis=1), self.nlstm)
 
-        simplelstmcell = SimpleGRUCell(self.nlstm, self.nlstm)
+        # if self.use_hebb:
+        #     hebb = state['hebb']
+        #     hebbiangru = HebbianGRUCell(self.nlstm, self.nlstm)
+        #     with tf.variable_scope('h2'):  #########
+        #         h2, new_lstm_state, new_hebb = hebbiangru(h1, lstm_states)
+        #
+        #     gen_outputs = dense(h2, 1,)
+        #     new_states = {'t': time + 1,
+        #                   'gen_outputs': gen_outputs,
+        #                   'lstm_states': new_lstm_state,
+        #                   'hebb':new_hebb}
+        #
+        # else:
+
+        # grucell = SimpleGRUCell(self.nlstm, self.nlstm)
+        grucell = HebbianGRUCell(self.nlstm, self.nlstm)
 
         with tf.variable_scope('h2'):
-            h2, new_lstm_state = simplelstmcell(h1, lstm_states)
+            h2, new_lstm_state = grucell(h1, lstm_states)
 
         gen_outputs = dense(h2, 1,)
         new_states = {'t': time + 1,
                       'gen_outputs': gen_outputs,
                       'lstm_states': new_lstm_state}
 
+        pdb.set_trace()
         return gen_outputs, new_states
 
 

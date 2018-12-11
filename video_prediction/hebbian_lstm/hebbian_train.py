@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import imp
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
-from video_prediction.hebbian_lstm.mini_lstm_net import make_mini_lstm
+from video_prediction.hebbian_lstm.setup_nets import make_mini_lstm
 
 
 from datetime import datetime
