@@ -72,13 +72,8 @@ class SimpleGRUCell(rnn_cell_impl.RNNCell):
         self._skip_connection = skip_connection
         self._reuse = reuse
 
-        if self._skip_connection:
-            output_channels = self._num_outputs + self._input_shape[-1]
-        else:
-            output_channels = self._num_outputs
-        cell_size = tensor_shape.TensorShape(self._input_shape)
         self._output_size = tensor_shape.TensorShape(num_outputs)
-        self._state_size = rnn_cell_impl.LSTMStateTuple(cell_size, self._output_size)
+        self._state_size = [tf.TensorShape(self._num_outputs)]
 
     @property
     def output_size(self):

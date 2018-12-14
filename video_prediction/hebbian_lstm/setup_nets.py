@@ -10,8 +10,8 @@ from video_prediction.hebbian_lstm.hebbian_gru import HebbianGRUCell
 
 
 class CustomLSTMwrapCell(tf.nn.rnn_cell.RNNCell):
-    def __init__(self, batch_size, inputs, context_frames, reuse=None):
-        super(CustomLSTMwrapCell, self).__init__(_reuse=reuse)
+    def __init__(self, batch_size, inputs, context_frames):
+        super(CustomLSTMwrapCell, self).__init__()
 
         self.inputs = inputs
         self._output_size = tf.TensorShape(1)
@@ -84,23 +84,23 @@ class CustomLSTMwrapCell(tf.nn.rnn_cell.RNNCell):
 
 
 class CustomGRUwrapCell(tf.nn.rnn_cell.RNNCell):
-    def __init__(self, batch_size, inputs, context_frames, reuse=None):
-        super(CustomGRUwrapCell, self).__init__(_reuse=reuse)
+    def __init__(self, batch_size, inputs, context_frames, hebb):
+        super(CustomGRUwrapCell, self).__init__()
 
         self.inputs = inputs
         self._output_size = tf.TensorShape(1)
 
-        self.nlstm = nlstm = 100
+        self.nlstm = nlstm = 10 # 100
         self._state_size  = {'t': tf.TensorShape([]),
                               'gen_outputs': tf.TensorShape(1),
                               }   # size lstmstates, size hebbian
 
+        self.use_hebb = hebb
 
-        self.use_hebb = True
         if self.use_hebb:
             rnn_state_size = [tf.TensorShape(nlstm), tf.TensorShape([nlstm, nlstm])]
         else:
-            rnn_state_size = [tf.TensorShape(nlstm)]
+            rnn_state_size = tf.TensorShape(nlstm)
         self._state_size['lstm_states'] = rnn_state_size
 
         self.ground_truth = tf.concat([tf.constant(True, dtype=tf.bool, shape=[context_frames, batch_size]),
@@ -133,22 +133,11 @@ class CustomGRUwrapCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope('h1'):
             h1 = dense(tf.concat([x_vals, y_vals], axis=1), self.nlstm)
 
-        # if self.use_hebb:
-        #     hebb = state['hebb']
-        #     hebbiangru = HebbianGRUCell(self.nlstm, self.nlstm)
-        #     with tf.variable_scope('h2'):  #########
-        #         h2, new_lstm_state, new_hebb = hebbiangru(h1, lstm_states)
-        #
-        #     gen_outputs = dense(h2, 1,)
-        #     new_states = {'t': time + 1,
-        #                   'gen_outputs': gen_outputs,
-        #                   'lstm_states': new_lstm_state,
-        #                   'hebb':new_hebb}
-        #
-        # else:
 
-        # grucell = SimpleGRUCell(self.nlstm, self.nlstm)
-        grucell = HebbianGRUCell(self.nlstm, self.nlstm)
+        if self.use_hebb:
+            grucell = HebbianGRUCell(self.nlstm, self.nlstm)
+        else:
+            grucell = SimpleGRUCell(self.nlstm, self.nlstm)
 
         with tf.variable_scope('h2'):
             h2, new_lstm_state = grucell(h1, lstm_states)
@@ -158,17 +147,17 @@ class CustomGRUwrapCell(tf.nn.rnn_cell.RNNCell):
                       'gen_outputs': gen_outputs,
                       'lstm_states': new_lstm_state}
 
-        pdb.set_trace()
         return gen_outputs, new_states
 
 
-def make_mini_lstm(x_vals, y_gtruth, batch_size, T):
+def make_mini_lstm(x_vals, y_gtruth, batch_size, T, args):
 
-    type = 'GRU'
-    if type == 'LSTM':
+    if args.expname == 'lstm':
         cell = CustomLSTMwrapCell(batch_size, x_vals, T // 2)
-    elif type == 'GRU':
-        cell = CustomGRUwrapCell(batch_size, x_vals, T // 2)
+    elif args.expname == 'gru':
+        cell = CustomGRUwrapCell(batch_size, x_vals, T // 2, hebb=False)
+    elif args.expname == 'gru_hebb':
+        cell = CustomGRUwrapCell(batch_size, x_vals, T // 2, hebb=True)
     else:
         raise NotImplementedError
 

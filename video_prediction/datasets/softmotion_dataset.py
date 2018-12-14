@@ -65,7 +65,9 @@ class SoftmotionVideoDataset(VideoDataset):
             pix_distribs = tf.stack([tf_utils.pixel_distribution(object_pos_, height, width)
                                      for object_pos_ in tf.unstack(object_pos, axis=1)], axis=-1)
             state_like_seqs['pix_distribs'] = pix_distribs
+
         return state_like_seqs, action_like_seqs
+
 
     def num_examples_per_epoch(self):
         # extract information from filename to count the number of trajectories in the dataset

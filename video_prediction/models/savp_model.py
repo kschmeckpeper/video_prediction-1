@@ -10,6 +10,9 @@ from video_prediction.models import VideoPredictionModel
 from video_prediction.models import pix2pix_model, mocogan_model, spectral_norm_model
 from video_prediction.ops import lrelu, dense, pad2d, conv2d, conv_pool2d, flatten, tile_concat, pool2d
 from video_prediction.rnn_ops import BasicConv2DLSTMCell, Conv2DGRUCell
+
+from video_prediction.hebbian_lstm.conv_hebbian_gru import HebbConv2DGRUCell
+
 from video_prediction.utils import tf_utils
 
 # Amount to use when lower bounding tensors
@@ -269,6 +272,19 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
         if self.hparams.conv_rnn == 'lstm':
             conv_rnn_state_sizes = [tf.nn.rnn_cell.LSTMStateTuple(conv_rnn_state_size, conv_rnn_state_size)
                                     for conv_rnn_state_size in conv_rnn_state_sizes]
+
+        if self.hparams.conv_rnn == 'hebbgru':
+            new = []
+            for conv_rnn_state_size in conv_rnn_state_sizes:
+                hebb_state_size = conv_rnn_state_size[0]//2*\
+                                         conv_rnn_state_size[1]//2* \
+                                         conv_rnn_state_size[2]//8
+                new.append([conv_rnn_state_size, tf.TensorShape([hebb_state_size, hebb_state_size])])
+            conv_rnn_state_sizes = new
+
+            for c in conv_rnn_state_sizes:
+                print(c)
+
         state_size = {'time': tf.TensorShape([]),
                       'gen_image': tf.TensorShape(image_shape),
                       'last_images': [tf.TensorShape(image_shape)] * self.hparams.last_frames,
@@ -348,6 +364,8 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
             Conv2DRNNCell = BasicConv2DLSTMCell
         elif self.hparams.conv_rnn == 'gru':
             Conv2DRNNCell = Conv2DGRUCell
+        elif self.hparams.conv_rnn == 'hebbgru':
+            Conv2DRNNCell = HebbConv2DGRUCell
         else:
             raise NotImplementedError
         if self.hparams.ablation_conv_rnn_norm:
@@ -376,7 +394,6 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
             t = tf.to_int32(tf.identity(time[0]))
 
         image = tf.where(self.ground_truth[t], inputs['images'], states['gen_image'])  # schedule sampling (if any)
-        pdb.set_trace()
 
         last_images = states['last_images'][1:] + [image]
         if 'pix_distribs' in inputs:
@@ -441,7 +458,6 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                     else:
                         conv_rnn_h = _h
 
-                    # pdb.set_trace()
                     conv_rnn_h, conv_rnn_state = self._conv_rnn_func(conv_rnn_h, conv_rnn_state, out_channels)
                 new_conv_rnn_states.append(conv_rnn_state)
             layers.append((_h, conv_rnn_h) if use_conv_rnn else (_h,))

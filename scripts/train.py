@@ -45,7 +45,7 @@ def main():
 
     parser.add_argument("--train_batch_sizes", type=int, nargs='+', help="splits for the training datasets")
 
-    parser.add_argument("--summary_freq", type=int, default=1000, help="save summaries (except for image and eval summaries) every summary_freq steps")
+    parser.add_argument("--summary_freq", type=int, default=200, help="save summaries (except for image and eval summaries) every summary_freq steps")
     parser.add_argument("--image_summary_freq", type=int, default=5000, help="save image summaries every image_summary_freq steps")
     parser.add_argument("--eval_summary_freq", type=int, default=0, help="save eval summaries every eval_summary_freq steps")
     parser.add_argument("--progress_freq", type=int, default=100, help="display progress every progress_freq steps")
@@ -72,12 +72,15 @@ def main():
     if args.conf != '':
         dataset_hparams_file = args.conf + '/dataset_hparams.json'
         model_hparams_file = args.conf + '/model_hparams.json'
+        print('using dataset_hparams_file', dataset_hparams_file)
+        print('using model_hparams_file', model_hparams_file)
     else:
         dataset_hparams_file = args.dataset_hparams_dict
         model_hparams_file = args.model_hparams_dict
 
-    # if args.conf != '':
-    #     logsdir = args.conf + '/' + args.dataset_hparams
+    if args.conf != '':
+        logsdir = args.conf + '/logs'
+        print('using logsdir:', logsdir)
 
     if args.output_dir is None:
         list_depth = 0
@@ -195,8 +198,6 @@ def main():
         for val_model, val_dataset in zip(val_models, val_datasets):
             with tf.variable_scope(training_scope, reuse=True):
                 val_model.build_graph(*val_dataset.make_batch(batch_size))
-
-    pdb.set_trace()
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)

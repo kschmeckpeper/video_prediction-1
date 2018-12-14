@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 import numpy as np
 import tensorflow as tf
+import pdb
 from tensorflow.contrib.training import HParams
 
 
@@ -46,6 +47,7 @@ class BaseVideoDataset(object):
                 self.input_dir = input_dir
                 self.filenames = sorted(filenames)  # ensures order is the same across systems
                 break
+
         if not self.filenames:
             raise FileNotFoundError('No tfrecords were found in %s.' % self.input_dir)
         self.dataset_name = os.path.basename(os.path.split(self.input_dir)[0])
@@ -154,6 +156,7 @@ class BaseVideoDataset(object):
                 image = tf.image.decode_jpeg(image_buffer)
             else:
                 image = tf.decode_raw(image_buffer, tf.uint8)
+
             image = tf.reshape(image, image_shape)
             crop_size = self.hparams.crop_size
             scale_size = self.hparams.scale_size
@@ -161,6 +164,8 @@ class BaseVideoDataset(object):
                 if not crop_size:
                     crop_size = min(image_shape[0], image_shape[1])
                 image = tf.image.resize_image_with_crop_or_pad(image, crop_size, crop_size)
+
+                pdb.set_trace()
                 image = tf.reshape(image, [crop_size, crop_size, 3])
                 if scale_size:
                     # upsample with bilinear interpolation but downsample with area interpolation
@@ -252,11 +257,13 @@ class VideoDataset(BaseVideoDataset):
         else:
             example = next(tf.python_io.tf_record_iterator(self.filenames[0]))
         self._dict_message = MessageToDict(tf.train.Example.FromString(example))
+
         for example_name, name_and_shape in (list(state_like_names_and_shapes.items()) +
                                              list(action_like_names_and_shapes.items())):
             name, shape = name_and_shape
             feature = self._dict_message['features']['feature']
             names = [name_ for name_ in feature.keys() if re.search(name.replace('%d', '\d+'), name_) is not None]
+
             if not names:
                 raise ValueError('Could not found any feature with name pattern %s.' % name)
             if example_name in self.state_like_names_and_shapes:
@@ -298,6 +305,7 @@ class VideoDataset(BaseVideoDataset):
                                          (name, inferred_shape, shape))
             else:
                 raise NotImplementedError
+
         self.state_like_names_and_shapes = OrderedDict([(k, tuple(v)) for k, v in state_like_names_and_shapes.items()])
         self.action_like_names_and_shapes = OrderedDict([(k, tuple(v)) for k, v in action_like_names_and_shapes.items()])
 
@@ -452,25 +460,29 @@ if __name__ == '__main__':
     import cv2
     from video_prediction import datasets
 
-    datasets = [
-        datasets.GoogleRobotVideoDataset('data/push/push_testseen', mode='test'),
-        datasets.SV2PVideoDataset('data/shape', mode='val'),
-        datasets.SV2PVideoDataset('data/humans', mode='val'),
-        datasets.SoftmotionVideoDataset('data/softmotion30_v1', mode='val'),
-        datasets.KTHVideoDataset('data/kth', mode='val'),
-        datasets.UCF101VideoDataset('data/ucf101', mode='val'),
-    ]
+    # datasets = [
+    #     datasets.GoogleRobotVideoDataset('data/push/push_testseen', mode='test'),
+    #     datasets.SV2PVideoDataset('data/shape', mode='val'),
+    #     datasets.SV2PVideoDataset('data/humans', mode='val'),
+    #     datasets.SoftmotionVideoDataset('data/softmotion30_v1', mode='val'),
+    #     datasets.KTHVideoDataset('data/kth', mode='val'),
+    #     datasets.UCF101VideoDataset('data/ucf101', mode='val'),
+    # ]
+
+    dataset = datasets.ActionFreeVideoDataset('/home/frederik/Downloads/bb_test')
+
     batch_size = 4
 
     sess = tf.Session()
 
-    for dataset in datasets:
-        inputs, _ = dataset.make_batch(batch_size)
-        images = inputs['images']
-        images = tf.reshape(images, [-1] + images.get_shape().as_list()[2:])
-        images = sess.run(images)
-        images = (images * 255).astype(np.uint8)
-        for image in images:
-            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-            cv2.imshow(dataset.input_dir, image)
-            cv2.waitKey(50)
+    # for dataset in datasets:
+
+    inputs, _ = dataset.make_batch(batch_size)
+    images = inputs['images']
+    images = tf.reshape(images, [-1] + images.get_shape().as_list()[2:])
+    images = sess.run(images)
+    images = (images * 255).astype(np.uint8)
+    for image in images:
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        cv2.imshow(dataset.input_dir, image)
+        cv2.waitKey(50)

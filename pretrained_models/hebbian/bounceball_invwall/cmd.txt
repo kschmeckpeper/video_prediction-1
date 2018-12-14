@@ -1,0 +1,6 @@
+CUDA_VISIBLE_DEVICES=0 python scripts/train.py  \
+ --input_dir /home/frederik/Downloads/bb_test \
+ --dataset actionfree \
+ --model savp \
+ --conf pretrained_models/hebbian/firsttest
+

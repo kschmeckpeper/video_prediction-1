@@ -65,7 +65,8 @@ def create_sine_data():
 
 def main():
     parser = argparse.ArgumentParser(description='Run benchmarks')
-    parser.add_argument('savedir', type=str)
+    parser.add_argument('expname', type=str)
+    parser.add_argument('--suf', type=str, default='')
     args = parser.parse_args()
 
 
@@ -75,7 +76,7 @@ def main():
 
     xvals_pl = tf.placeholder(tf.float32, [batch_size, T, inp_dim])
     yvals_gtruth_pl = tf.placeholder(tf.float32, [batch_size, T, out_dim])
-    outputs = make_mini_lstm(xvals_pl, yvals_gtruth_pl, batch_size, T)
+    outputs = make_mini_lstm(xvals_pl, yvals_gtruth_pl, batch_size, T, args)
 
     loss = tf.reduce_mean(tf.square(yvals_gtruth_pl - outputs))
 
@@ -93,10 +94,15 @@ def main():
     train_dict = pickle.load(open('toy_data/sine_train.pkl', "rb"))
     val_dict = pickle.load(open('toy_data/sine_val.pkl', "rb"))
 
+    os.environ['CUDA_VISIBLE_DEVICES'] = ""
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
 
-    summary_writer = tf.summary.FileWriter('plots/', graph=sess.graph, flush_secs=10)
+    savedir = 'plots/' + args.expname + args.suf
+    if not os.path.exists(savedir):
+        os.makedirs(savedir)
+
+    summary_writer = tf.summary.FileWriter(savedir, graph=sess.graph, flush_secs=10)
 
     num_iter = 10000
     for itr in range(num_iter):
@@ -114,7 +120,8 @@ def main():
             ind = np.random.choice(np.arange(NVAL), batch_size)
             feed_dict = {xvals_pl:val_dict['inputs'][ind][...,None], yvals_gtruth_pl:val_dict['targets'][ind][...,None]}
             cost, outputs_vals, val_summ_str = sess.run([loss, outputs, valsum], feed_dict)
-            plot(itr, outputs_vals, val_dict['inputs'][ind], val_dict['targets'][ind], save_dir=args.savedir)
+
+            plot(itr, outputs_vals, val_dict['inputs'][ind], val_dict['targets'][ind], savedir= 'plots/' +args.expname)
 
             summary_writer.add_summary(val_summ_str, itr)
 
@@ -133,7 +140,9 @@ def main():
         #     summary_writer.add_summary(summary_str, itr)
 
 
-def plot(itr, outputs, inputs, gtruth, save_dir):
+def plot(itr, outputs, inputs, gtruth, savedir):
+
+
 
     outputs = outputs.squeeze()
     inputs = inputs.squeeze()
@@ -143,7 +152,7 @@ def plot(itr, outputs, inputs, gtruth, save_dir):
         plt.figure()
         plt.plot(inputs[i], outputs[i])
         plt.plot(inputs[i], gtruth[i])
-        plt.savefig(save_dir + '/sine_itr{}_ex{}.png'.format(itr, i))
+        plt.savefig(savedir + '/sine_itr{}_ex{}.png'.format(itr, i))
         plt.close()
 
 if __name__ == '__main__':

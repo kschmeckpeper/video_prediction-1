@@ -73,11 +73,6 @@ class HebbianGRUCell(rnn_cell_impl.RNNCell):
         self._skip_connection = skip_connection
         self._reuse = reuse
 
-        if self._skip_connection:
-            output_channels = self._num_outputs + self._input_shape[-1]
-        else:
-            output_channels = self._num_outputs
-        cell_size = tensor_shape.TensorShape(self._input_shape)
         self._output_size = tensor_shape.TensorShape(num_outputs)
 
         self._state_size = [tf.TensorShape(self._num_outputs), tf.TensorShape([self._num_outputs, self._num_outputs])]
@@ -139,7 +134,6 @@ class HebbianGRUCell(rnn_cell_impl.RNNCell):
             weights_shape = [input_shape[1], self._num_outputs]
             weights= tf.get_variable('weights_h', weights_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
             alpha = tf.get_variable('alpha', [input_shape[1], input_shape[1]], dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
-            # one way of using the hebbian matrix, there might be others
 
             r_state = tf.expand_dims(r_ * state, 1)
 
@@ -151,14 +145,22 @@ class HebbianGRUCell(rnn_cell_impl.RNNCell):
         c_ = self._activation_fn(candidate)
         new_h = u_ * state + (1 - u_) * c_
 
-        # hebbian update according to backpropamine
-        # eta_hebb_old = tf.get_variable('eta_hebb_old', [1], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
-        # pred_eta = tf.get_variable('pred_eta',  [input_shape[1], input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
-        # pred_eta_b = tf.get_variable('pred_b',  [input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
-        # eta_hat = tf.sigmoid(tf.matmul(candidate[:,None], pred_eta) + pred_eta_b)
 
+        #Todo: add layernorm
+
+        # hebbian update according to backpropamine
         eta = tf.get_variable('eta',  [input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
 
-        new_hebb = (1-eta)* hebb + eta*tf.matmul(state[:,:,None], candidate[:,None])
+        #Todo: add learned, conditional eta!
+        backpropamine = False
+        if backpropamine:
+            pred_eta = tf.get_variable('pred_eta',  [input_shape[1], input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
+            pred_eta_b = tf.get_variable('pred_b',  [input_shape[1]], dtype=tf.float32, initializer=tf.constant_initializer(value=0.01))
+            eta_hat = tf.sigmoid(tf.matmul(candidate, pred_eta) + pred_eta_b)
+            new_hebb = (1-eta)*hebb + eta_hat*tf.matmul(state[:,:,None], candidate[:,None])
+        else:
+            new_hebb = (1-eta)*hebb + eta*tf.matmul(state[:,:,None], candidate[:,None])
 
-        return new_h, new_hebb
+        new_state = [new_h, new_hebb]
+
+        return new_h, new_state

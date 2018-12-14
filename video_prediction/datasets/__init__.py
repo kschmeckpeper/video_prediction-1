@@ -9,6 +9,7 @@ from .cartgripper_dataset import CartgripperVideoDataset
 from .weissgripper_dataset import WeissgripperVideoDataset
 from .sawyer_dataset import SawyerVideoDataset
 from .gelsight_dataset import GelsightDataset
+from .actionfree_dataset import ActionFreeVideoDataset
 
 
 def get_dataset_class(dataset):
@@ -22,6 +23,7 @@ def get_dataset_class(dataset):
         'cartgripper': 'CartgripperVideoDataset',
         'weissgripper':'WeissgripperVideoDataset',
         'sawyer':'SawyerVideoDataset',
+        'actionfree':'ActionFreeVideoDataset',
         'gelsight': 'GelsightDataset'
     }
     dataset_class = dataset_mappings.get(dataset, dataset)
