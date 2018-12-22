@@ -2,6 +2,7 @@ import itertools
 import tensorflow as tf
 from .base_dataset import VideoDataset
 from .softmotion_dataset import SoftmotionVideoDataset
+import numpy as np
 
 
 class SawyerVideoDataset(SoftmotionVideoDataset):
@@ -34,6 +35,8 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
             image_view=[0],
             compressed = True,
             append_touch=False,
+            append_state=False,
+            state_vec=[0.]
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -42,4 +45,8 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
         if self.hparams.append_touch:
             touch_data = state_like_seqs.pop('touch')
             state_like_seqs['states'] = tf.concat((state_like_seqs['states'], tf.nn.sigmoid(touch_data)), axis = -1)
+        if self.hparams.use_state and self.hparams.append_state:
+            extra_state = np.tile(np.array(self.hparams.state_vec).reshape((1, -1)), [self.hparams.sequence_length, 1])
+            state_like_seqs['states'] = tf.concat([state_like_seqs['states'],
+                                                   tf.convert_to_tensor(extra_state, dtype=tf.float32)], axis=1)
         return state_like_seqs, action_like_seqs
