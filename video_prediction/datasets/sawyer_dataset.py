@@ -13,7 +13,7 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
             img_name = 'images{}'.format(i)
             if i==0 or len(self.hparams.image_view) == 1:
                 img_name = 'images'
-            img_format = '%d/env/image_view{}/encoded'.format(i), (48, 64, 3)
+            img_format = '%d/env/image_view{}/encoded'.format(i), (self.hparams.img_height, self.hparams.img_width, 3)
             self.state_like_names_and_shapes[img_name] = img_format
 
         if self.hparams.use_state:
@@ -29,6 +29,8 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
             context_frames=2,
             sequence_length=15,
             time_shift=3,
+            img_width=64,
+            img_height=48,
             use_state=True,
             sdim=5,
             adim=4,
