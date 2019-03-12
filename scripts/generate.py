@@ -161,23 +161,20 @@ def main():
         feed_dict = {input_ph: input_results[name] for name, input_ph in input_phs.items()}
         for stochastic_sample_ind in range(args.num_stochastic_samples):
             gen_images = sess.run(model.outputs['gen_images'], feed_dict=feed_dict)
-            if args.save_lossless:
-                print('asdf')
-                import pdb; pdb.set_trace()
-            else:
-                for i, gen_images_ in enumerate(gen_images):
-                    gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
 
-                    if not args.no_gif:
-                        gen_images_fname = 'gen_image_%05d_%02d.gif' % (sample_ind + i, stochastic_sample_ind)
-                        save_gif(os.path.join(args.output_gif_dir, gen_images_fname),
-                                gen_images_[:args.gif_length] if args.gif_length else gen_images_, fps=args.fps)
+            for i, gen_images_ in enumerate(gen_images):
+                gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
 
-                    gen_image_fname_pattern = 'gen_image_%%05d_%%02d_%%0%dd.png' % max(2, len(str(len(gen_images_) - 1)))
-                    for t, gen_image in enumerate(gen_images_):
-                        gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
-                        gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
-                        cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
+                if not args.no_gif:
+                    gen_images_fname = 'gen_image_%05d_%02d.gif' % (sample_ind + i, stochastic_sample_ind)
+                    save_gif(os.path.join(args.output_gif_dir, gen_images_fname),
+                            gen_images_[:args.gif_length] if args.gif_length else gen_images_, fps=args.fps)
+
+                gen_image_fname_pattern = 'gen_image_%%05d_%%02d_%%0%dd.png' % max(2, len(str(len(gen_images_) - 1)))
+                for t, gen_image in enumerate(gen_images_):
+                    gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
+                    gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
+                    cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
 
         sample_ind += args.batch_size
 
