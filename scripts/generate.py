@@ -47,6 +47,7 @@ def main():
 
     parser.add_argument("--gpu_mem_frac", type=float, default=0, help="fraction of gpu memory to use")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--no_gif", type=bool, action='store_true', default=False, help="don't store gif images")
 
     args = parser.parse_args()
 
@@ -130,7 +131,7 @@ def main():
 
     with tf.variable_scope(''):
         model.build_graph(input_phs)
-
+    
     for output_dir in (args.output_gif_dir, args.output_png_dir):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -160,18 +161,23 @@ def main():
         feed_dict = {input_ph: input_results[name] for name, input_ph in input_phs.items()}
         for stochastic_sample_ind in range(args.num_stochastic_samples):
             gen_images = sess.run(model.outputs['gen_images'], feed_dict=feed_dict)
-            for i, gen_images_ in enumerate(gen_images):
-                gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
+            if args.save_lossless:
+                print('asdf')
+                import pdb; pdb.set_trace()
+            else:
+                for i, gen_images_ in enumerate(gen_images):
+                    gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
 
-                gen_images_fname = 'gen_image_%05d_%02d.gif' % (sample_ind + i, stochastic_sample_ind)
-                save_gif(os.path.join(args.output_gif_dir, gen_images_fname),
-                         gen_images_[:args.gif_length] if args.gif_length else gen_images_, fps=args.fps)
+                    if not args.no_gif:
+                        gen_images_fname = 'gen_image_%05d_%02d.gif' % (sample_ind + i, stochastic_sample_ind)
+                        save_gif(os.path.join(args.output_gif_dir, gen_images_fname),
+                                gen_images_[:args.gif_length] if args.gif_length else gen_images_, fps=args.fps)
 
-                gen_image_fname_pattern = 'gen_image_%%05d_%%02d_%%0%dd.png' % max(2, len(str(len(gen_images_) - 1)))
-                for t, gen_image in enumerate(gen_images_):
-                    gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
-                    gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
-                    cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
+                    gen_image_fname_pattern = 'gen_image_%%05d_%%02d_%%0%dd.png' % max(2, len(str(len(gen_images_) - 1)))
+                    for t, gen_image in enumerate(gen_images_):
+                        gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
+                        gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
+                        cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
 
         sample_ind += args.batch_size
 
