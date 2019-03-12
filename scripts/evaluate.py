@@ -399,7 +399,7 @@ def main():
     else:
         num_examples_per_epoch = dataset.num_examples_per_epoch()
     if num_examples_per_epoch % args.batch_size != 0:
-        raise ValueError('batch_size should evenly divide the dataset')
+        print('batch_size should evenly divide the dataset')
 
     inputs, target = dataset.make_batch(args.batch_size)
     if not isinstance(model, models.GroundTruthVideoPredictionModel):

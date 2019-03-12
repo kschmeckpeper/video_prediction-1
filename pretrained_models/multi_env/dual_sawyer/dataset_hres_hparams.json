@@ -9,6 +9,6 @@
     "use_state": false,
     "adim":4,
     "sdim":5,
-    "img_width": 256,
-    "img_height": 192
+    "img_width": 128,
+    "img_height": 96
 }

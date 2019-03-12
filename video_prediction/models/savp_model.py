@@ -142,6 +142,7 @@ def create_encoder(inputs, e_net='legacy', use_e_rnn=False, rnn='lstm', **kwargs
 
 def encoder_fn(inputs, hparams=None):
     images = inputs['images']
+
     image_pairs = tf.concat([images[:hparams.sequence_length - 1],
                              images[1:hparams.sequence_length]], axis=-1)
     if 'actions' in inputs:
@@ -203,6 +204,20 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                 (self.hparams.ngf, False),
                 (self.hparams.ngf, False),
             ]
+        elif scale_size == 128:
+            self.encoder_layer_specs = [
+                (self.hparams.ngf, True),
+                (self.hparams.ngf * 2, True),
+                (self.hparams.ngf * 4, True),
+                (self.hparams.ngf * 8, True),
+            ]
+            self.decoder_layer_specs = [
+                (self.hparams.ngf * 4, True),
+                (self.hparams.ngf * 2, True),
+                (self.hparams.ngf, True),
+                (self.hparams.ngf, False),
+            ]
+
         elif scale_size == 64:
             self.encoder_layer_specs = [
                 (self.hparams.ngf, True),
@@ -666,9 +681,13 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             generator_fn, discriminator_fn, encoder_fn, *args, **kwargs)
         if self.hparams.e_net == 'none' or self.hparams.nz == 0:
             self.encoder_fn = None
+        else:
+            assert self.hparams.e_net != 'nlayers_context'
+
         if self.hparams.d_net == 'none':
             self.discriminator_fn = None
         self.deterministic = not self.hparams.nz
+        print(self.hparams.context_frames)
 
     def get_default_hparams_dict(self):
         default_hparams = super(SAVPVideoPredictionModel, self).get_default_hparams_dict()

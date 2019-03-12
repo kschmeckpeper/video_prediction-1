@@ -49,6 +49,7 @@ class BaseVideoPredictionModel(object):
         self.eval_num_samples = eval_num_samples
         self.eval_parallel_iterations = eval_parallel_iterations
         self.hparams = self.parse_hparams(hparams_dict, hparams)
+      
         if self.hparams.context_frames == -1:
             raise ValueError('Invalid context_frames %r. It might have to be '
                              'specified.' % self.hparams.context_frames)

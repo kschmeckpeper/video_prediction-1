@@ -3,7 +3,7 @@
     "acvideo_gan_weight": 0.0,
     "acvideo_vae_gan_weight": 0.0,
     "ae_l2_weight": 0.0,
-    "batch_size": 4,
+    "batch_size": 8,
     "beta1": 0.9,
     "beta2": 0.999,
     "clip_length": 8,
