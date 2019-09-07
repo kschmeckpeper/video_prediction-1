@@ -10,6 +10,7 @@ from video_prediction.models import pix2pix_model, mocogan_model, spectral_norm_
 from video_prediction.ops import lrelu, dense, pad2d, conv2d, conv_pool2d, flatten, tile_concat, pool2d
 from video_prediction.rnn_ops import BasicConv2DLSTMCell, Conv2DGRUCell
 from video_prediction.utils import tf_utils
+from video_prediction.losses import kl_loss
 
 # Amount to use when lower bounding tensors
 RELU_SHIFT = 1e-12
@@ -139,12 +140,57 @@ def create_encoder(inputs, e_net='legacy', use_e_rnn=False, rnn='lstm', **kwargs
     outputs = nest.map_structure(unflatten, outputs)
     return outputs
 
+def action_encoder_fn(inputs, hparams=None):
+    reshaped_actions = tf.reshape(inputs['actions'], [-1, inputs['actions'].shape[-1]])
+
+    num_hidden_channels = hparams.action_encoder_channels
+
+    with tf.variable_scope('action_encoder_start'):
+        out = dense(reshaped_actions, num_hidden_channels)
+        out = tf.nn.relu(out)
+    for i in range(hparams.action_encoder_layers):
+        with tf.variable_scope('action_encoder_layer_{}'.format(i)):
+            out = dense(out, num_hidden_channels)
+            out = tf.nn.relu(out)
+    with tf.variable_scope('action_encoder_out_mu'):
+        action_mu = dense(out, hparams.encoded_action_size)
+        action_mu = tf.reshape(action_mu, [inputs['actions'].shape[0], inputs['actions'].shape[1], -1])
+    with tf.variable_scope('action_encoder_out_sigma_sq'):
+        action_log_sigma_sq = dense(out, hparams.encoded_action_size)
+        action_log_sigma_sq = tf.clip_by_value(action_log_sigma_sq, -10, 10)
+        action_log_sigma_sq = tf.reshape(action_log_sigma_sq, [inputs['actions'].shape[0], inputs['actions'].shape[1], -1])
+
+
+    outputs = {'action_log_sigma_sq': action_log_sigma_sq,
+               'action_mu': action_mu}
+    return outputs
+
+def inverse_model_fn(inputs, hparams=None):
+    images = inputs['images']
+    image_pairs = tf.concat([images[:hparams.sequence_length - 1],
+                             images[1:hparams.sequence_length]], axis=-1)
+    outputs = create_encoder(image_pairs,
+                             e_net=hparams.e_net,
+                             use_e_rnn=hparams.use_e_rnn,
+                             rnn=hparams.rnn,
+                             nz=hparams.encoded_action_size,
+                             nef=hparams.nef,
+                             n_layers=hparams.n_layers,
+                             norm_layer=hparams.norm_layer)
+    renamed_outputs = {'action_inverse_mu': outputs['z_mu'],
+                       'action_inverse_log_sigma_sq': outputs['z_log_sigma_sq']}
+    print("Outputs for inverse model", renamed_outputs.keys())
+    return renamed_outputs
+
 
 def encoder_fn(inputs, hparams=None):
     images = inputs['images']
 
+
     image_pairs = tf.concat([images[:hparams.sequence_length - 1],
                              images[1:hparams.sequence_length]], axis=-1)
+
+
     if 'actions' in inputs:
         image_pairs = tile_concat([image_pairs,
                                    tf.expand_dims(tf.expand_dims(inputs['actions'], axis=-2), axis=-2)], axis=-1)
@@ -243,8 +289,13 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
 
         # output_size
         gen_input_shape = list(image_shape)
-        if 'actions' in inputs:
+        if 'encoded_actions' in inputs:
+            gen_input_shape[-1] += inputs['encoded_actions'].shape[-1].value
+        elif 'actions' in inputs:
+            print("gen_input in cell:",gen_input_shape)
+            print("actions in cell", inputs['actions'].shape)
             gen_input_shape[-1] += inputs['actions'].shape[-1].value
+
         num_masks = self.hparams.last_frames * self.hparams.num_transformed_images + \
             int(bool(self.hparams.prev_image_background)) + \
             int(bool(self.hparams.first_image_background and not self.hparams.context_images_background)) + \
@@ -399,9 +450,13 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
 
         state_action = []
         state_action_z = []
-        if 'actions' in inputs:
+        if 'encoded_actions' in inputs:
+            state_action.append(inputs['encoded_actions'])
+            state_action_z.append(inputs['encoded_actions'])
+        elif 'actions' in inputs:
             state_action.append(inputs['actions'])
             state_action_z.append(inputs['actions'])
+
         if 'states' in inputs:
             state_action.append(state)
             # don't backpropagate the convnet through the state dynamics
@@ -424,7 +479,9 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                 return tf.concat(tensors, axis=axis)
         state_action = concat(state_action, axis=-1)
         state_action_z = concat(state_action_z, axis=-1)
-        if 'actions' in inputs:
+        if 'encoded_actions' in inputs:
+            gen_input = tile_concat([image, inputs['encoded_actions'][:, None, None, :]], axis=-1)
+        elif 'actions' in inputs:
             gen_input = tile_concat([image, inputs['actions'][:, None, None, :]], axis=-1)
         else:
             gen_input = image
@@ -634,7 +691,27 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
 
 
 def generator_fn(inputs, outputs_enc=None, hparams=None):
+    print("generator inputs:", inputs.keys())
+    if 'actions' in inputs.keys():
+        print("actions:", inputs['actions'])
+    if outputs_enc is not None:
+        print("generator outputs_enc:", outputs_enc.keys())
+    if hparams is not None:
+        print("generator hparams:", hparams)
+
     batch_size = inputs['images'].shape[1].value
+
+    usable_actions = tf.boolean_mask(inputs['actions'], inputs['use_action'])
+    usable_actions = tf.reshape(usable_actions, [14, -1, 4])
+
+    if hparams.use_encoded_actions:
+        action_probs = action_encoder_fn(inputs, hparams=hparams)
+        print("Action probs:", action_probs.keys())
+        eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
+        inputs['encoded_actions'] = action_probs['action_mu'] + tf.sqrt(tf.exp(action_probs['action_log_sigma_sq'])) * eps
+        print("encoded actions:", inputs['encoded_actions'].shape)
+        print("original actions:", inputs['actions'].shape)
+
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
               for name, input in inputs.items()}
     if hparams.nz:
@@ -651,9 +728,13 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     else:
         if outputs_enc is not None:
             raise ValueError('outputs_enc has to be None when nz is 0.')
+    print("inputs after adding zs:", inputs.keys())
+    print("actions:", inputs['actions'].shape)
     cell = DNACell(inputs, hparams)
     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
                                    swap_memory=False, time_major=True)
+    print("outputs:", outputs.keys())
+    print("gen_inputs:", outputs['gen_inputs'].shape)
     if hparams.nz:
         inputs_samples = {name: flatten(tf.tile(input[:, None], [1, hparams.num_samples] + [1] * (input.shape.ndims - 1)), 1, 2)
                           for name, input in inputs.items() if name != 'zs'}
@@ -672,6 +753,9 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     outputs = {name: output[hparams.context_frames - 1:] for name, output in outputs.items()}
     gen_images = outputs['gen_images']
     outputs['ground_truth_sampling_mean'] = tf.reduce_mean(tf.to_float(cell.ground_truth[hparams.context_frames:]))
+    for k in action_probs:
+        outputs[k] = action_probs[k]
+
     return gen_images, outputs
 
 
@@ -727,7 +811,12 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             nef=64,
             use_rnn_z=True,
             ablation_conv_rnn_norm=False,
-            renormalize_pixdistrib=True
+            renormalize_pixdistrib=True,
+            use_encoded_actions=False,
+            action_encoder_channels=16,
+            action_encoder_layers=3,
+            encoded_action_size=5,
+            action_encoder_kl_weight=0.1
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -744,6 +833,19 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             override_hparams_maybe('e_net', 'none')
             override_hparams_maybe('schedule_sampling', 'none')
         return hparams
+    
+    def generator_loss_fn(self, inputs, outputs, targets):
+        print("loss_fn inputs:", inputs.keys())
+        print("loss fn outputs:", outputs.keys())
+        print("loss fn targets:", targets.shape)
+        gen_losses = super(SAVPVideoPredictionModel, self).generator_loss_fn(inputs, outputs, targets)
+        print("gen_loss:", gen_losses)
+
+        if self.hparams.use_encoded_actions:
+            action_encoder_kl_loss = kl_loss(outputs['action_mu'], outputs['action_log_sigma_sq'])
+            gen_losses['action_encoder_kl_loss'] = (action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
+
+        return gen_losses
 
 
 def apply_dna_kernels(image, kernels, dilation_rate=(1, 1)):
