@@ -10,7 +10,7 @@ from video_prediction.models import pix2pix_model, mocogan_model, spectral_norm_
 from video_prediction.ops import lrelu, dense, pad2d, conv2d, conv_pool2d, flatten, tile_concat, pool2d
 from video_prediction.rnn_ops import BasicConv2DLSTMCell, Conv2DGRUCell
 from video_prediction.utils import tf_utils
-from video_prediction.losses import kl_loss
+from video_prediction.losses import kl_loss, js_loss
 
 # Amount to use when lower bounding tensors
 RELU_SHIFT = 1e-12
@@ -177,8 +177,8 @@ def inverse_model_fn(inputs, hparams=None):
                              nef=hparams.nef,
                              n_layers=hparams.n_layers,
                              norm_layer=hparams.norm_layer)
-    renamed_outputs = {'action_inverse_mu': outputs['z_mu'],
-                       'action_inverse_log_sigma_sq': outputs['z_log_sigma_sq']}
+    renamed_outputs = {'action_inverse_mu': outputs['enc_zs_mu'],
+                       'action_inverse_log_sigma_sq': outputs['enc_zs_log_sigma_sq']}
     print("Outputs for inverse model", renamed_outputs.keys())
     return renamed_outputs
 
@@ -701,8 +701,6 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
 
     batch_size = inputs['images'].shape[1].value
 
-    usable_actions = tf.boolean_mask(inputs['actions'], inputs['use_action'])
-    usable_actions = tf.reshape(usable_actions, [14, -1, 4])
 
     if hparams.use_encoded_actions:
         action_probs = action_encoder_fn(inputs, hparams=hparams)
@@ -711,6 +709,20 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
         inputs['encoded_actions'] = action_probs['action_mu'] + tf.sqrt(tf.exp(action_probs['action_log_sigma_sq'])) * eps
         print("encoded actions:", inputs['encoded_actions'].shape)
         print("original actions:", inputs['actions'].shape)
+
+    if hparams.train_with_partial_actions:
+        assert hparams.use_encoded_actions, "Training without actions requires using encoded actions"
+
+        inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
+        print("inverse_action_probs:", inverse_action_probs)
+        print("mus:", inverse_action_probs['action_inverse_mu'].shape)
+        eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
+        inputs['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
+            tf.sqrt(tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'])) * eps
+
+        usable_actions = tf.boolean_mask(inputs['actions'], inputs['use_action'])
+        usable_actions = tf.reshape(usable_actions, [14, -1, 4])
+        print("encoded actions inv:", inputs['encoded_actions_inverse'].shape)
 
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
               for name, input in inputs.items()}
@@ -753,8 +765,12 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     outputs = {name: output[hparams.context_frames - 1:] for name, output in outputs.items()}
     gen_images = outputs['gen_images']
     outputs['ground_truth_sampling_mean'] = tf.reduce_mean(tf.to_float(cell.ground_truth[hparams.context_frames:]))
-    for k in action_probs:
-        outputs[k] = action_probs[k]
+    if hparams.use_encoded_actions:
+        for k in action_probs:
+            outputs[k] = action_probs[k]
+    if hparams.train_with_partial_actions:
+        for k in inverse_action_probs:
+            outputs[k] = inverse_action_probs[k]
 
     return gen_images, outputs
 
@@ -816,7 +832,9 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             action_encoder_channels=16,
             action_encoder_layers=3,
             encoded_action_size=5,
-            action_encoder_kl_weight=0.1
+            action_encoder_kl_weight=0.1,
+            train_with_partial_actions=False,
+            action_js_loss=0.1
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -844,6 +862,14 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
         if self.hparams.use_encoded_actions:
             action_encoder_kl_loss = kl_loss(outputs['action_mu'], outputs['action_log_sigma_sq'])
             gen_losses['action_encoder_kl_loss'] = (action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
+
+        if self.hparams.train_with_partial_actions:
+            inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
+            gen_losses['action_inverse_encoder_kl_loss'] = (inverse_action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
+
+            action_js_loss = js_loss(outputs['action_mu'], outputs['action_log_sigma_sq'],
+                                     outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
+            gen_losses['action_js_loss'] = (action_js_loss, self.hparams.action_js_loss)
 
         return gen_losses
 
