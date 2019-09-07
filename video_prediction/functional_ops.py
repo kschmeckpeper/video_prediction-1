@@ -33,8 +33,8 @@ def foldl(fn, elems, initializer=None, parallel_iterations=10, back_prop=True,
               if output_is_sequence else x[0])
 
   elems_flat = input_flatten(elems)
-
-  in_graph_mode = context.in_graph_mode()
+  in_graph_mode = not context.executing_eagerly()
+#  in_graph_mode = context.in_graph_mode()
   with ops.name_scope(name, "foldl", [elems]):
     # TODO(akshayka): Remove the in_graph_mode check once caching devices are
     # supported in Eager
