@@ -22,6 +22,8 @@ from video_prediction.utils import ffmpeg_gif, tf_utils
 
 
 def main():
+    program_start_time = time.time()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dirs", "--input_dir", type=str, nargs='+', required=True,
                         help="either a directory containing subdirectories train, val, test, "
@@ -32,7 +34,7 @@ def main():
                                              "default is logs_dir/model_fname, where model_fname consists of "
                                              "information from model and model_hparams")
     parser.add_argument("--checkpoint", help="directory with checkpoint or checkpoint name (e.g. checkpoint_dir/model-200000)")
-    parser.add_argument("--resume", action='store_true', help='resume from lastest checkpoint in output_dir.')
+    parser.add_argument("--no_resume", action='store_false', dest='resume', help='resume from lastest checkpoint in output_dir.')
 
     parser.add_argument("--conf", type=str, default='', help="folder with all config files")
 
@@ -59,7 +61,8 @@ def main():
 
     parser.add_argument("--timing_file", type=str, help="")
 
-
+    parser.add_argument("--run_time", type=int, default=3600)
+    
     args = parser.parse_args()
     if len(args.dataset) == 1:
         args.dataset = args.dataset[0]
@@ -107,9 +110,11 @@ def main():
         args.output_dir = os.path.join(logsdir, model_fname)
 
     if args.resume:
+        print("args.checkpoint", args.checkpoint)
         if args.checkpoint:
             raise ValueError('resume and checkpoint cannot both be specified')
         args.checkpoint = args.output_dir
+        print("Will attempt to resume from checkpoint at {}".format(args.checkpoint))
 
     model_hparams_dict = {}
     if model_hparams_file:
@@ -118,20 +123,24 @@ def main():
     if args.checkpoint:
         checkpoint_dir = os.path.normpath(args.checkpoint)
         if not os.path.exists(checkpoint_dir):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), checkpoint_dir)
-        if not os.path.isdir(args.checkpoint):
-            checkpoint_dir, _ = os.path.split(checkpoint_dir)
-        with open(os.path.join(checkpoint_dir, "options.json")) as f:
-            print("loading options from checkpoint %s" % args.checkpoint)
-            options = json.loads(f.read())
-            args.dataset = args.dataset or options['dataset']
-            args.model = args.model or options['model']
-        try:
-            with open(os.path.join(checkpoint_dir, "model_hparams.json")) as f:
-                model_hparams_dict.update(json.loads(f.read()))
-                model_hparams_dict.pop('num_gpus', None)  # backwards-compatibility
-        except FileNotFoundError:
-            print("model_hparams.json was not loaded because it does not exist")
+            args.checkpoint = None
+            checkpoint_dir = None
+            print("cannot load checkpoint because none exists")
+#            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), checkpoint_dir)
+        else:
+            if not os.path.isdir(args.checkpoint):
+                checkpoint_dir, _ = os.path.split(checkpoint_dir)
+            with open(os.path.join(checkpoint_dir, "options.json")) as f:
+                print("loading options from checkpoint %s" % args.checkpoint)
+                options = json.loads(f.read())
+                args.dataset = args.dataset or options['dataset']
+                args.model = args.model or options['model']
+            try:
+                with open(os.path.join(checkpoint_dir, "model_hparams.json")) as f:
+                    model_hparams_dict.update(json.loads(f.read()))
+                    model_hparams_dict.pop('num_gpus', None)  # backwards-compatibility
+            except FileNotFoundError:
+                print("model_hparams.json was not loaded because it does not exist")
 
     print('----------------------------------- Options ------------------------------------')
     for k, v in args._get_kwargs():
@@ -276,8 +285,9 @@ def main():
         print("parameter_count =", sess.run(parameter_count))
 
         sess.run(tf.global_variables_initializer())
+        print("restoring from", args.checkpoint)
         train_model.restore(sess, args.checkpoint)
-
+        print("restored from:", args.checkpoint)
         start_step = sess.run(global_step)
         # start at one step earlier to log everything without doing any training
         # step is relative to the start_step
@@ -375,10 +385,13 @@ def main():
             if should(args.summary_freq) or should(args.image_summary_freq) or should(args.eval_summary_freq):
                 summary_writer.flush()
 
-            if should(args.save_freq):
+            if should(args.save_freq) or time.time() - program_start_time > args.run_time:
                 print("saving model to", args.output_dir)
                 saver.save(sess, os.path.join(args.output_dir, "model"), global_step=global_step)
                 print("done")
+                if time.time() - program_start_time > args.run_time:
+                    print("Exiting program because time limit has been reached")
+                    return
 
 
             if should(args.gif_freq):
