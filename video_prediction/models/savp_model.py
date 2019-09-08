@@ -10,7 +10,7 @@ from video_prediction.models import pix2pix_model, mocogan_model, spectral_norm_
 from video_prediction.ops import lrelu, dense, pad2d, conv2d, conv_pool2d, flatten, tile_concat, pool2d
 from video_prediction.rnn_ops import BasicConv2DLSTMCell, Conv2DGRUCell
 from video_prediction.utils import tf_utils
-from video_prediction.losses import kl_loss, js_loss
+from video_prediction.losses import kl_loss, js_loss, l2_loss
 
 # Amount to use when lower bounding tensors
 RELU_SHIFT = 1e-12
@@ -139,6 +139,21 @@ def create_encoder(inputs, e_net='legacy', use_e_rnn=False, rnn='lstm', **kwargs
 
     outputs = nest.map_structure(unflatten, outputs)
     return outputs
+
+def action_decoder_fn(inputs, hparams=None):
+    reshaped_encoded_actions = tf.reshape(inputs['encoded_actions'], [-1, inputs['encoded_actions'].shape[-1]])
+
+    with tf.variable_scope('action_decoder_start'):
+        out = dense(reshaped_encoded_actions, hparams.action_encoder_channels)
+        out = tf.nn.relu(out)
+    for i in range(hparams.action_encoder_layers):
+        with tf.variable_scope('action_decoder_layer_{}'.format(i)):
+            out = dense(out, hparams.action_encoder_channels)
+            out = tf.nn.relu(out)
+    with tf.variable_scope('action_decoder_out'):
+        action_reconstruction = dense(out, inputs['actions'].shape[-1])
+        action_reconstruction = tf.reshape(action_reconstruction, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
+    return {'decoded_actions': action_reconstruction}
 
 def action_encoder_fn(inputs, hparams=None):
     reshaped_actions = tf.reshape(inputs['actions'], [-1, inputs['actions'].shape[-1]])
@@ -710,6 +725,9 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
         print("encoded actions:", inputs['encoded_actions'].shape)
         print("original actions:", inputs['actions'].shape)
 
+        if hparams.decode_actions:
+            decoded_actions = action_decoder_fn(inputs, hparams=hparams)
+
     if hparams.train_with_partial_actions:
         assert hparams.use_encoded_actions, "Training without actions requires using encoded actions"
 
@@ -734,6 +752,8 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
 #        usable_actions = tf.reshape(usable_actions, [14, -1, 4])
         print("encoded actions inv:", inputs['encoded_actions_inverse'].shape)
         print("encoded actions combined:", inputs['encoded_actions'].shape)
+
+
 
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
               for name, input in inputs.items()}
@@ -779,6 +799,8 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     if hparams.use_encoded_actions:
         for k in action_probs:
             outputs[k] = action_probs[k]
+        if hparams.decode_actions:
+            outputs['decoded_actions'] = decoded_actions['decoded_actions']
     if hparams.train_with_partial_actions:
         for k in inverse_action_probs:
             outputs[k] = inverse_action_probs[k]
@@ -840,9 +862,11 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             ablation_conv_rnn_norm=False,
             renormalize_pixdistrib=True,
             use_encoded_actions=False,
+            decode_actions=False,
+            action_decoder_mse_weight=1.0,
             action_encoder_channels=16,
             action_encoder_layers=3,
-            encoded_action_size=5,
+            encoded_action_size=4,
             action_encoder_kl_weight=0.1,
             train_with_partial_actions=False,
             action_js_loss=0.1
@@ -873,6 +897,10 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
         if self.hparams.use_encoded_actions:
             action_encoder_kl_loss = kl_loss(outputs['action_mu'], outputs['action_log_sigma_sq'])
             gen_losses['action_encoder_kl_loss'] = (action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
+
+            if self.hparams.decode_actions:
+                decoded_action_loss = l2_loss(outputs['decoded_actions'], inputs['actions'])
+                gen_losses['action_decoder_mse'] = (decoded_action_loss, self.hparams.action_decoder_mse_weight)
 
         if self.hparams.train_with_partial_actions:
             inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
