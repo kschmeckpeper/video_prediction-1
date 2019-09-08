@@ -38,7 +38,8 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
             compressed = True,
             append_touch=False,
             append_state=False,
-            state_vec=[0.]
+            state_vec=[0.],
+            use_action=True
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -51,10 +52,8 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
             extra_state = np.tile(np.array(self.hparams.state_vec).reshape((1, -1)), [self.hparams.sequence_length, 1])
             state_like_seqs['states'] = tf.concat([state_like_seqs['states'],
                                                    tf.convert_to_tensor(extra_state, dtype=tf.float32)], axis=1)
-        print("action_like_seqs", action_like_seqs.keys())
-        print("state_like", state_like_seqs.keys())
-        print("``````````````````````````````````````````````````````````````````````````````````````````````")
         action_shape = action_like_seqs['actions'].shape
         print("action shape:", action_shape)
-        action_like_seqs['use_action'] = tf.constant(True, shape=[action_shape[0], action_shape[1]], dtype=tf.bool)
+        print("Using action:", self.hparams.use_action)
+        action_like_seqs['use_action'] = tf.constant(self.hparams.use_action, shape=[action_shape[0], 1], dtype=tf.bool)
         return state_like_seqs, action_like_seqs

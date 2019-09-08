@@ -720,9 +720,20 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
         inputs['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
             tf.sqrt(tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'])) * eps
 
-        usable_actions = tf.boolean_mask(inputs['actions'], inputs['use_action'])
-        usable_actions = tf.reshape(usable_actions, [14, -1, 4])
+        inputs['original_encoded_actions'] = inputs['encoded_actions'] - 0
+        print("orignal", inputs['original_encoded_actions'])
+        print("input:", inputs['encoded_actions'])
+        print("use_actions:", inputs['use_action'].shape)
+        use_actions = tf.reshape(inputs['use_action'], [-1, 1])
+        use_actions = tf.tile(use_actions, [1, hparams.encoded_action_size])
+        use_actions = tf.reshape(use_actions, [inputs['encoded_actions'].shape[0], inputs['encoded_actions'].shape[1], inputs['encoded_actions'].shape[2]])
+        print("use_actions:", use_actions.shape)
+
+        inputs['encoded_actions'] = tf.where(use_actions, x=inputs['encoded_actions'], y=inputs['encoded_actions_inverse'])
+#        usable_actions = tf.boolean_mask(inputs['actions'], inputs['use_actions'])
+#        usable_actions = tf.reshape(usable_actions, [14, -1, 4])
         print("encoded actions inv:", inputs['encoded_actions_inverse'].shape)
+        print("encoded actions combined:", inputs['encoded_actions'].shape)
 
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
               for name, input in inputs.items()}
