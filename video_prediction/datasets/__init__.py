@@ -8,7 +8,7 @@ from .ucf101_dataset import UCF101VideoDataset
 from .cartgripper_dataset import CartgripperVideoDataset
 from .weissgripper_dataset import WeissgripperVideoDataset
 from .sawyer_dataset import SawyerVideoDataset
-
+from .human_dataset import HumanVideoDataset
 
 def get_dataset_class(dataset):
     dataset_mappings = {
@@ -20,7 +20,8 @@ def get_dataset_class(dataset):
         'ucf101': 'UCF101VideoDataset',
         'cartgripper': 'CartgripperVideoDataset',
         'weissgripper':'WeissgripperVideoDataset',
-        'sawyer':'SawyerVideoDataset'
+        'sawyer':'SawyerVideoDataset',
+        'human':'HumanVideoDataset',
     }
     dataset_class = dataset_mappings.get(dataset, dataset)
     dataset_class = globals().get(dataset_class)

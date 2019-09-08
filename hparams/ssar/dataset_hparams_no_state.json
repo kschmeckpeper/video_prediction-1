@@ -2,7 +2,7 @@
     "adim": 4,
     "append_state": false,
     "append_touch": false,
-    "compressed": false,
+    "compressed": true,
     "context_frames": 2,
     "crop_size": 0,
     "force_time_shift": false,
@@ -46,7 +46,6 @@
         0.0
     ],
     "time_shift": 3,
-    "use_state": true,
-    "use_action": false
+    "use_state": false
 }
 

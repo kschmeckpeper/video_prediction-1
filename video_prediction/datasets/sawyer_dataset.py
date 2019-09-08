@@ -53,6 +53,7 @@ class SawyerVideoDataset(SoftmotionVideoDataset):
             state_like_seqs['states'] = tf.concat([state_like_seqs['states'],
                                                    tf.convert_to_tensor(extra_state, dtype=tf.float32)], axis=1)
         action_shape = action_like_seqs['actions'].shape
+        print("State shape:", state_like_seqs['images'].shape)
         print("action shape:", action_shape)
         print("Using action:", self.hparams.use_action)
         action_like_seqs['use_action'] = tf.constant(self.hparams.use_action, shape=[action_shape[0], 1], dtype=tf.bool)
