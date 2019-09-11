@@ -25,10 +25,13 @@ def main():
     program_start_time = time.time()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dirs", "--input_dir", type=str, nargs='+', required=True,
+    parser.add_argument("--input_dirs", "--input_dir", type=str, nargs='+',
                         help="either a directory containing subdirectories train, val, test, "
                              "etc, or a directory containing the tfrecords")
     parser.add_argument("--val_input_dirs", type=str, nargs='+', help="directories containing the tfrecords. default: [input_dir]")
+    parser.add_argument("--train_input_dirs", type=str, nargs='+', help='directories containing the training datasets')
+
+
     parser.add_argument("--logs_dir", default='', help="ignored if output_dir is specified")
     parser.add_argument("--output_dir", help="output directory where json files, summary, model, gifs, etc are saved. "
                                              "default is logs_dir/model_fname, where model_fname consists of "
@@ -39,8 +42,17 @@ def main():
     parser.add_argument("--conf", type=str, default='', help="folder with all config files")
 
     parser.add_argument("--dataset", type=str, nargs='+', help="dataset class name")
+    parser.add_argument("--train_datasets", type=str, nargs='+', default=None, help="list of train dataset class names")
+    parser.add_argument("--val_datasets", type=str, nargs='+', default=None, help="list of val dataset class names")
+
     parser.add_argument("--dataset_hparams", type=str, nargs='+', help="a string of comma separated list of dataset hyperparameters")
+    parser.add_argument("--train_dataset_hparams", type=str, nargs='+', help="a string of comma seperated list of train dataset hyperparameters")
+    parser.add_argument("--val_dataset_hparams", type=str, nargs='+', help="a string of comma seperated list of val dataset hyperparameters")
+
     parser.add_argument("--dataset_hparams_dict", type=str, nargs='+', help="a json file of dataset hyperparameters")
+    parser.add_argument("--train_dataset_hparams_files", type=str, nargs='+', help='a list of json files for the train dataset hyperparameters')
+    parser.add_argument("--val_dataset_hparams_files", type=str, nargs="+", help="a list of json files for the val dataset hyperparameters")
+
     parser.add_argument("--model", type=str, help="model class name")
     parser.add_argument("--model_hparams", type=str, help="a string of comma separated list of model hyperparameters")
     parser.add_argument("--model_hparams_dict", type=str, help="a json file of model hyperparameters")
@@ -64,7 +76,10 @@ def main():
     parser.add_argument("--run_time", type=int, default=3600)
     
     args = parser.parse_args()
-    if len(args.dataset) == 1:
+    if args.train_datasets is not None:
+        assert len(args.train_datasets) == len(args.train_dataset_hparams_files) and len(args.train_datasets) == len(args.train_dataset_hparams)
+        assert len(args.val_datasets) == len(args.val_dataset_hparams_files) and len(args.val_datasets) == len(args.val_dataset_hparams)
+    elif len(args.dataset) == 1:
         args.dataset = args.dataset[0]
         if args.dataset_hparams is not None:
             args.dataset_hparams = args.dataset_hparams[0]
@@ -80,7 +95,7 @@ def main():
         np.random.seed(args.seed)
         random.seed(args.seed)
 
-    if args.conf != '' and not isinstance(args.dataset, list):
+    if args.conf != '' and not isinstance(args.dataset, list) and args.train_datasets is None:
         dataset_hparams_file = args.conf + '/dataset_hparams.json'
         model_hparams_file = args.conf + '/model_hparams.json'
     elif args.conf != '':
@@ -147,8 +162,46 @@ def main():
         print(k, "=", v)
     print('------------------------------------- End --------------------------------------')
 
+    if args.train_datasets is not None and args.val_datasets is not None:
+        print("loading seperate train and val datasets")
 
-    if isinstance(args.dataset, list):
+        train_dataset_hparams_dicts = [{} for _ in range(len(args.train_datasets))]
+        for hparams_dict, params_file in zip(train_dataset_hparams_dicts, args.train_dataset_hparams_files):
+            with open(params_file) as f:
+                hparams_dict.update(json.loads(f.read()))
+
+        val_dataset_hparams_dicts = [{} for _ in range(len(args.val_datasets))]
+        for hparams_dict, params_file in zip(val_dataset_hparams_dicts, args.val_dataset_hparams_files):
+            with open(params_file) as f:
+                hparams_dict.update(json.loads(f.read()))
+
+        train_datasets = []
+        for dataset, hparams_dict, hparams_override, input_dir in zip(args.train_datasets,
+                                                                      train_dataset_hparams_dicts,
+                                                                      args.train_dataset_hparams,
+                                                                      args.train_input_dirs):
+            VideoDataset = datasets.get_dataset_class(dataset)
+            print("Adding training dataset:", dataset, input_dir)
+            train_datasets.append(VideoDataset(input_dir,
+                                               mode='train',
+                                               hparams_dict=hparams_dict,
+                                               hparams=hparams_override))
+
+        val_datasets = []
+        for dataset, hparams_dict, hparams_override, input_dir in zip(args.val_datasets,
+                                                                      val_dataset_hparams_dicts,
+                                                                      args.val_dataset_hparams,
+                                                                      args.val_input_dirs):
+            print("Adding validation dataset:", dataset, input_dir)
+            VideoDataset = datasets.get_dataset_class(dataset)
+            val_datasets.append(VideoDataset(input_dir,
+                                               mode='val',
+                                               hparams_dict=hparams_dict,
+                                               hparams=hparams_override))
+
+
+    elif isinstance(args.dataset, list):
+        print("dataset hparams file:", dataset_hparams_file)
         dataset_hparams_dicts = [{} for _ in range(len(args.dataset))]
         for hparams_dict, params_file in zip(dataset_hparams_dicts, dataset_hparams_file):
             with open(params_file) as f:
@@ -161,6 +214,9 @@ def main():
                                                                                      args.dataset_hparams, args.input_dirs,
                                                                                      val_input_dirs):
             VideoDataset = datasets.get_dataset_class(dataset)
+            print("Dataset:", dataset)
+            print("input_dir:", input_dir)
+            print("val_input_dir", val_input_dir)
             train_datasets.append(VideoDataset(input_dir, mode='train',
                                               hparams_dict=hparams_dict, hparams=hparams_override))
             val_datasets.append(VideoDataset(val_input_dir, mode='val', hparams_dict=hparams_dict,
@@ -199,10 +255,10 @@ def main():
     VideoPredictionModel = models.get_model_class(args.model)
     # override hparams from first dataset for train model
     train_model = VideoPredictionModel(mode='train', hparams_dict=override_hparams_dict(train_datasets[0]), hparams=args.model_hparams)
-    if val_input_dirs == args.input_dirs:
-        val_models = [VideoPredictionModel(mode='val', hparams_dict=override_hparams_dict(val_datasets[0]), hparams=args.model_hparams)]
-    else:
-        val_models = [VideoPredictionModel(mode='val', hparams_dict=override_hparams_dict(val_dataset), hparams=args.model_hparams)
+    #if val_input_dirs == args.input_dirs:
+    #    val_models = [VideoPredictionModel(mode='val', hparams_dict=override_hparams_dict(val_datasets[0]), hparams=args.model_hparams)]
+    #else:
+    val_models = [VideoPredictionModel(mode='val', hparams_dict=override_hparams_dict(val_dataset), hparams=args.model_hparams)
                       for val_dataset in val_datasets]
 
     batch_size = train_model.hparams.batch_size
@@ -219,20 +275,20 @@ def main():
         targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
 
         train_model.build_graph(inputs, targets)
-    if val_input_dirs == args.input_dirs:
+#    if val_input_dirs == args.input_dirs:
+#        with tf.variable_scope(training_scope, reuse=True):
+#            if args.train_batch_sizes:
+#                inputs, targets = zip(*[train_dataset.make_batch(bs)
+#                                        for train_dataset, bs in zip(train_datasets, args.train_batch_sizes)])
+#            else:
+#                inputs, targets = zip(*[train_dataset.make_batch(batch_size // 2) for train_dataset in train_datasets])
+#            inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
+#            targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
+#            val_models[0].build_graph(inputs, targets)
+#    else:
+    for val_model, val_dataset in zip(val_models, val_datasets):
         with tf.variable_scope(training_scope, reuse=True):
-            if args.train_batch_sizes:
-                inputs, targets = zip(*[train_dataset.make_batch(bs)
-                                        for train_dataset, bs in zip(train_datasets, args.train_batch_sizes)])
-            else:
-                inputs, targets = zip(*[train_dataset.make_batch(batch_size // 2) for train_dataset in train_datasets])
-            inputs = nest.map_structure(lambda *x: tf.concat(x, axis=0), *inputs)
-            targets = nest.map_structure(lambda *x: tf.concat(x, axis=0), *targets)
-            val_models[0].build_graph(inputs, targets)
-    else:
-        for val_model, val_dataset in zip(val_models, val_datasets):
-            with tf.variable_scope(training_scope, reuse=True):
-                val_model.build_graph(*val_dataset.make_batch(batch_size))
+            val_model.build_graph(*val_dataset.make_batch(batch_size))
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -321,7 +377,7 @@ def main():
             results = sess.run(fetches)
             run_elapsed_time = time.time() - run_start_time
             elapsed_times.append(run_elapsed_time)
-            if run_elapsed_time > 1.5:
+            if run_elapsed_time > 0.01:#1.5:
                 print('session.run took %0.1fs' % run_elapsed_time)
 
             # print("average t_iter {} \n".format(np.mean(elapsed_times[-20:])))
