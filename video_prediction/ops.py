@@ -2,14 +2,19 @@ import numpy as np
 import tensorflow as tf
 
 
-def dense(inputs, units, use_spectral_norm=False):
+def dense(inputs,
+          units,
+          use_spectral_norm=False,
+          kernel_init=tf.truncated_normal_initializer(stddev=0.02), 
+          bias_init=tf.zeros_initializer()):
+
     with tf.variable_scope('dense'):
         input_shape = inputs.get_shape().as_list()
         kernel_shape = [input_shape[1], units]
-        kernel = tf.get_variable('kernel', kernel_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+        kernel = tf.get_variable('kernel', kernel_shape, dtype=tf.float32, initializer=kernel_init)
         if use_spectral_norm:
             kernel = spectral_normed_weight(kernel)
-        bias = tf.get_variable('bias', [units], dtype=tf.float32, initializer=tf.zeros_initializer())
+        bias = tf.get_variable('bias', [units], dtype=tf.float32, initializer=bias_init)
         outputs = tf.matmul(inputs, kernel) + bias
         return outputs
 

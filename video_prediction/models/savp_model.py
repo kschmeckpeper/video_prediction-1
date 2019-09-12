@@ -149,19 +149,19 @@ def action_decoder_fn(inputs, hparams=None, norm=None):
 #    out = reshaped_encoded_actions
 
     with tf.variable_scope('action_decoder_start'):
-        out = dense(reshaped_encoded_actions, hparams.action_encoder_channels)
+        out = dense(reshaped_encoded_actions, hparams.action_encoder_channels, kernel_init=None, bias_init=None)
         print("Out shape:", out.shape)
         if norm is not None:
             out = norm_layer(out)
         out = tf.nn.relu(out)
     for i in range(hparams.action_encoder_layers):
         with tf.variable_scope('action_decoder_layer_{}'.format(i)):
-            out = dense(out, hparams.action_encoder_channels)
+            out = dense(out, hparams.action_encoder_channels, kernel_init=None, bias_init=None)
             if norm is not None:
                 out = norm_layer(out)
             out = tf.nn.relu(out)
     with tf.variable_scope('action_decoder_out'):
-        action_reconstruction = dense(out, inputs['actions'].shape[-1])
+        action_reconstruction = dense(out, inputs['actions'].shape[-1], kernel_init=None, bias_init=None)
 #        print("recon shape:", action_reconstruction.shape)
         action_reconstruction = tf.reshape(action_reconstruction, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
 #        print("final:", action_reconstruction.shape)
@@ -176,18 +176,18 @@ def action_encoder_fn(inputs, hparams=None, norm=None):
     num_hidden_channels = hparams.action_encoder_channels
 
     with tf.variable_scope('action_encoder_start'):
-        out = dense(reshaped_actions, num_hidden_channels)
+        out = dense(reshaped_actions, num_hidden_channels, kernel_init=None, bias_init=None)
         if norm is not None:
             out = norm_layer(out)
         out = tf.nn.relu(out)
     for i in range(hparams.action_encoder_layers):
         with tf.variable_scope('action_encoder_layer_{}'.format(i)):
-            out = dense(out, num_hidden_channels)
+            out = dense(out, num_hidden_channels, kernel_init=None, bias_init=None)
             if norm is not None:
                 out = norm_layer(out)
             out = tf.nn.relu(out)
     with tf.variable_scope('action_encoder_out_mu'):
-        action_mu = dense(out, hparams.encoded_action_size)
+        action_mu = dense(out, hparams.encoded_action_size, kernel_init=None, bias_init=None)
         action_mu = tf.reshape(action_mu, [inputs['actions'].shape[0], inputs['actions'].shape[1], -1])
     with tf.variable_scope('action_encoder_out_sigma_sq'):
         action_log_sigma_sq = dense(out, hparams.encoded_action_size)
@@ -904,6 +904,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             action_js_loss=0.1,
             deterministic_inverse=False,
             deterministic_inverse_mse=1.0,
+            only_encoder=False
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
