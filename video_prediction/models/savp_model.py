@@ -140,29 +140,27 @@ def create_encoder(inputs, e_net='legacy', use_e_rnn=False, rnn='lstm', **kwargs
     outputs = nest.map_structure(unflatten, outputs)
     return outputs
 
-def action_decoder_fn(inputs, hparams=None, norm=None):
-    reshaped_encoded_actions = tf.reshape(inputs['encoded_actions'], [-1, inputs['encoded_actions'].shape[-1]])
-    print("reshaped shape:", reshaped_encoded_actions.shape)
-    if hparams.action_encoder_norm_layer is not None:
-        print("Norming decoder")
-        norm_layer = ops.get_norm_layer(hparams.action_encoder_norm_layer)
-#    out = reshaped_encoded_actions
+def action_decoder_fn(encoded_actions, actions_shape, hparams=None, norm=None):
+    with tf.variable_scope('action_decoder', reuse=tf.AUTO_REUSE):
+        reshaped_encoded_actions = tf.reshape(encoded_actions, [-1, encoded_actions.shape[-1]])
+        if hparams.action_encoder_norm_layer is not None:
+            print("Norming decoder")
+            norm_layer = ops.get_norm_layer(hparams.action_encoder_norm_layer)
 
-    with tf.variable_scope('action_decoder_start'):
-        out = dense(reshaped_encoded_actions, hparams.action_encoder_channels, kernel_init=None, bias_init=None)
-        print("Out shape:", out.shape)
-        if norm is not None:
-            out = norm_layer(out)
-        out = tf.nn.relu(out)
-    for i in range(hparams.action_encoder_layers):
-        with tf.variable_scope('action_decoder_layer_{}'.format(i)):
-            out = dense(out, hparams.action_encoder_channels, kernel_init=None, bias_init=None)
+        with tf.variable_scope('action_decoder_start'):
+            out = dense(reshaped_encoded_actions, hparams.action_encoder_channels, kernel_init=None, bias_init=None)
             if norm is not None:
                 out = norm_layer(out)
             out = tf.nn.relu(out)
-    with tf.variable_scope('action_decoder_out'):
-        action_reconstruction = dense(out, inputs['actions'].shape[-1], kernel_init=None, bias_init=None)
-        action_reconstruction = tf.reshape(action_reconstruction, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
+        for i in range(hparams.action_encoder_layers):
+            with tf.variable_scope('action_decoder_layer_{}'.format(i)):
+                out = dense(out, hparams.action_encoder_channels, kernel_init=None, bias_init=None)
+                if norm is not None:
+                    out = norm_layer(out)
+                out = tf.nn.relu(out)
+        with tf.variable_scope('action_decoder_out'):
+            action_reconstruction = dense(out, actions_shape[-1], kernel_init=None, bias_init=None)
+            action_reconstruction = tf.reshape(action_reconstruction, [actions_shape[0], actions_shape[1], actions_shape[2]])
 
     return action_reconstruction
 
@@ -782,11 +780,12 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     if hparams.decode_actions and hparams.use_encoded_actions:
         inputs['encoded_actions'] = tf.Print(inputs['encoded_actions'], [inputs['encoded_actions'][0, :, 0]], "Encoded actions in decode", summarize=168*4)
         decoded_actions = {}
-        decoded_actions['decoded_actions'] = action_decoder_fn(inputs, hparams=hparams)
+        decoded_actions['decoded_actions'] = action_decoder_fn(inputs['encoded_actions'], inputs['actions'].shape, hparams=hparams)
         decoded_actions['decoded_actions'] = tf.Print(decoded_actions['decoded_actions'], [decoded_actions['decoded_actions'][0, :, 0]], "decoded_actions", summarize=14)
 
         if hparams.decode_from_inverse:
-            decoded_actions['decoded_inverse_actions'] = action_decoder_fn(inputs['encoded_actions_inverse'], inputs['actions'].shape, hparams=hparams)
+            print("Decoding from inverse:")
+            decoded_actions['decoded_actions_inverse'] = action_decoder_fn(inputs['encoded_actions_inverse'], inputs['actions'].shape, hparams=hparams)
             
 
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
@@ -834,7 +833,9 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
         for k in action_probs:
             outputs[k] = action_probs[k]
         if hparams.decode_actions:
-            outputs['decoded_actions'] = decoded_actions['decoded_actions']
+            for k in decoded_actions:
+                outputs[k] = decoded_actions[k]
+            
     if hparams.train_with_partial_actions:
         for k in inverse_action_probs:
             outputs[k] = inverse_action_probs[k]
