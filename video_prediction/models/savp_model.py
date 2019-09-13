@@ -216,6 +216,27 @@ def inverse_model_fn(inputs, hparams=None):
     return renamed_outputs
 
 
+def image_encoder_fn(inputs, hparams=None):
+    images = inputs['images'][0]
+
+    outputs = create_encoder(images,
+                             e_net=hparams.e_net,
+                             use_e_rnn=False,
+                             rnn=hparams.rnn,
+                             nz=2*hparams.encoded_action_size,
+                             nef=hparams.nef,
+                             n_layers=hparams.n_layers,
+                             norm_layer=hparams.norm_layer)
+    renamed_outputs = {'enc_image_mu': outputs['enc_zs_mu'],
+                       'enc_image_log_sigma_sq': outputs['enc_zs_log_sigma_sq']}
+    print("Outputs for image encoder", renamed_outputs.keys())
+    return renamed_outputs
+
+
+def image_decoder_fn(inputs, hparams=None):
+    raise NotImplementedError
+
+
 def encoder_fn(inputs, hparams=None):
     images = inputs['images']
 
@@ -740,7 +761,32 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     if hparams.train_with_partial_actions:
         assert hparams.use_encoded_actions or hparams.deterministic_inverse, "Training without actions requires using encoded actions"
 
-        if hparams.nda:
+        if hparams.learn_z_seq_prior:
+            # Learn prior for robot data
+            inputs['r_prior_z_mu'] = tf.Variable(tf.zeros([hparams.encoded_action_size]))
+            inputs['r_prior_z_log_sigma_sq'] = tf.Variable(tf.zeros([hparams.encoded_action_size]))
+
+            enc_image_probs = image_encoder_fn(inputs, hparams=hparams)
+
+            eps = tf.random_normal([batch_size, hparams.encoded_image_size], 0, 1)
+            enc_image = enc_image_probs['enc_image_mu'] + \
+                tf.sqrt(tf.exp(enc_image_probs['enc_image_log_sigma_sq'])) * eps
+
+            # Learn prior for human data
+            lstm_cell = tf.nn.rnn_cell.LSTMCell(num_units=hparams.z_lstm_size)
+            with tf.variable_scope('z_lstm') as lstm_scope:
+                zero_state = lstm_cell.zero_state(batch_size=batch_size, dtype=tf.float32)
+                _, initial_state = lstm_cell(enc_image, zero_state)
+
+                lstm_scope.reuse_variables()
+                lstm_outputs = []
+                output = tf.zeros([batch_size, 2 * hparams.encoded_action_size])
+                for t in range(hparams.sequence_length - 1):
+                    output, state = lstm_cell(output, state)
+                    lstm_outputs.append(output)
+            lstm_outputs = tf.reshape(tf.concat(lstm_outputs, 1), [batch_size, hparams.sequence_length - 1, lstm_cell.output_size])
+
+        elif hparams.nda:
             if hparams.deterministic_da:
                 da = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
                 da_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da], axis=0)
@@ -783,6 +829,7 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
             use_actions = tf.reshape(use_actions, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
             inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=inputs['actions_inverse'])
 
+        # TODO: Add domain variable for the visual shift?
 
     if hparams.decode_actions and hparams.use_encoded_actions:
         decoded_actions = {}
@@ -809,26 +856,6 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     else:
         if outputs_enc is not None:
             raise ValueError('outputs_enc has to be None when nz is 0.')
-
-    if hparams.ndx:
-        if hparams.deterministic_dx:
-            dx = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
-            dx_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx], axis=0)
-            tiled_dx = tf.tile(tf.expand_dims(dx_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
-            inputs['dx'] = tiled_dx
-        else:
-            dx_mu = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
-            dx_log_sigma = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
-
-            dx_mu_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_mu], axis=0)
-            tiled_dx_mu = tf.tile(tf.expand_dims(dx_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
-
-            dx_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_log_sigma], axis=0)
-            tiled_dx_log_sigma = tf.tile(tf.expand_dims(dx_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
-
-            eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
-            dx = tiled_dx_mu + tf.exp(tiled_dx_log_sigma) * eps
-            inputs['dx'] = dx
 
     cell = DNACell(inputs, hparams)
     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
@@ -933,11 +960,9 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             deterministic_inverse=False,
             deterministic_inverse_mse=1.0,
             decode_from_inverse=False,
-            ndx=8,
-            deterministic_dx=False,
             nda=8,
             deterministic_da=False,
-            learn_z_seq_prior=False
+            learn_z_seq_prior=True
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -966,7 +991,10 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
                 tmp_mu = tf.gather(tf.reshape(outputs['action_mu'], [-1]), idx)
                 tmp_log_sigma_sq = tf.gather(tf.reshape(outputs['action_log_sigma_sq'], [-1]), idx)
                 
-                action_encoder_kl_loss = kl_loss(tmp_mu, tmp_log_sigma_sq)
+                if not hparams.learn_z_seq_prior:
+                    action_encoder_kl_loss = kl_loss(tmp_mu, tmp_log_sigma_sq)
+                else:
+                    action_encoder_kl_loss = kl_loss(tmp_mu, tmp_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
 
             gen_losses['action_encoder_kl_loss'] = (action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
 
@@ -977,6 +1005,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
                 gen_losses['action_decoder_mse'] = (decoded_action_loss, self.hparams.action_decoder_mse_weight)
 
         if self.hparams.train_with_partial_actions and not self.hparams.deterministic_inverse:
+            # TODO: Modify KL/JS loss for learned prior option
             inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
             gen_losses['action_inverse_encoder_kl_loss'] = (inverse_action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
 
