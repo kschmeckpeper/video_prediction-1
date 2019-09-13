@@ -199,6 +199,9 @@ def inverse_model_fn(inputs, hparams=None):
     images = inputs['images']
     image_pairs = tf.concat([images[:hparams.sequence_length - 1],
                              images[1:hparams.sequence_length]], axis=-1)
+    if 'da' in inputs:
+        image_pairs = tile_concat([image_pairs,
+                                   tf.expand_dims(tf.expand_dims(inputs['da'], axis=-2), axis=-2)], axis=-1)
     outputs = create_encoder(image_pairs,
                              e_net=hparams.inverse_model_net,
                              use_e_rnn=hparams.use_inverse_model_rnn,
@@ -737,6 +740,25 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     if hparams.train_with_partial_actions:
         assert hparams.use_encoded_actions or hparams.deterministic_inverse, "Training without actions requires using encoded actions"
 
+        if hparams.nda:
+            # da_mu = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
+            # da_log_sigma = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
+
+            # da_mu_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_mu], axis=0)
+            # tiled_da_mu = tf.tile(tf.expand_dims(da_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+
+            # da_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_log_sigma], axis=0)
+            # tiled_da_log_sigma = tf.tile(tf.expand_dims(da_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+
+            # eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
+            # da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
+            # inputs['da'] = da
+
+            da = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
+            da_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da], axis=0)
+            tiled_da = tf.tile(tf.expand_dims(da_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+            inputs['da'] = tiled_da
+
         inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
 
         if not hparams.deterministic_inverse:
@@ -786,6 +808,26 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     else:
         if outputs_enc is not None:
             raise ValueError('outputs_enc has to be None when nz is 0.')
+
+    if hparams.ndx:
+        # dx_mu = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
+        # dx_log_sigma = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
+
+        # dx_mu_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_mu], axis=0)
+        # tiled_dx_mu = tf.tile(tf.expand_dims(dx_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+
+        # dx_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_log_sigma], axis=0)
+        # tiled_dx_log_sigma = tf.tile(tf.expand_dims(dx_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+
+        # eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
+        # dx = tiled_dx_mu + tf.exp(tiled_dx_log_sigma) * eps
+        # inputs['dx'] = dx
+
+        dx = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
+        dx_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx], axis=0)
+        tiled_dx = tf.tile(tf.expand_dims(dx_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+        inputs['dx'] = tiled_dx
+
     cell = DNACell(inputs, hparams)
     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
                                    swap_memory=False, time_major=True)
