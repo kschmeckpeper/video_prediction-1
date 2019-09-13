@@ -722,11 +722,6 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
 
 def generator_fn(inputs, outputs_enc=None, hparams=None):
     inputs['actions'] = inputs['actions'] / tf.constant([0.07, 0.07, 0.5, 0.15])
-    print("generator inputs:", inputs.keys())
-    if 'actions' in inputs.keys():
-        print("actions:", inputs['actions'])
-    if outputs_enc is not None:
-        print("generator outputs_enc:", outputs_enc.keys())
     if hparams is not None:
         print("generator hparams:", hparams)
 
@@ -734,16 +729,8 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
 
 
     if hparams.use_encoded_actions:
-#        inputs['actions'] = tf.Print(inputs['actions'], [inputs['actions']], "before", summarize=4)
-#        inputs['actions'] = inputs['actions'] / tf.constant([0.07, 0.07, 0.5, 0.15])
-        inputs['actions'] = tf.Print(inputs['actions'], [inputs['actions'][0, :, 0]], "after", summarize=168*4)
-
-
-#        inputs['actions'] = tf.Print(inputs['actions'], [tf.reduce_mean(tf.abs(inputs['actions']), axis=[0, 1])], "input actions", summarize=4)
         action_probs = action_encoder_fn(inputs, hparams=hparams)
         eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
-        action_probs['action_mu'] = tf.Print(action_probs['action_mu'], [action_probs['action_mu']], "action_mu", summarize=4)
-        action_probs['action_log_sigma_sq'] = tf.Print(action_probs['action_log_sigma_sq'], [action_probs['action_log_sigma_sq']], "action_sigma", summarize=4)
         inputs['encoded_actions'] = action_probs['action_mu'] + tf.exp(action_probs['action_log_sigma_sq'] / 2.0) * eps
 
 
@@ -751,11 +738,8 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
         assert hparams.use_encoded_actions or hparams.deterministic_inverse, "Training without actions requires using encoded actions"
 
         inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
-        print("inverse_action_probs:", inverse_action_probs)
-        print("mus:", inverse_action_probs['action_inverse_mu'].shape)
 
         if not hparams.deterministic_inverse:
-            print("Variational:")
             eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
             inputs['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
                 tf.sqrt(tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'])) * eps
@@ -778,10 +762,8 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
 
 
     if hparams.decode_actions and hparams.use_encoded_actions:
-        inputs['encoded_actions'] = tf.Print(inputs['encoded_actions'], [inputs['encoded_actions'][0, :, 0]], "Encoded actions in decode", summarize=168*4)
         decoded_actions = {}
         decoded_actions['decoded_actions'] = action_decoder_fn(inputs['encoded_actions'], inputs['actions'].shape, hparams=hparams)
-        decoded_actions['decoded_actions'] = tf.Print(decoded_actions['decoded_actions'], [decoded_actions['decoded_actions'][0, :, 0]], "decoded_actions", summarize=14)
 
         if hparams.decode_from_inverse:
             print("Decoding from inverse:")
@@ -804,13 +786,9 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     else:
         if outputs_enc is not None:
             raise ValueError('outputs_enc has to be None when nz is 0.')
-    print("inputs after adding zs:", inputs.keys())
-    print("actions:", inputs['actions'].shape)
     cell = DNACell(inputs, hparams)
     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
                                    swap_memory=False, time_major=True)
-    print("outputs:", outputs.keys())
-    print("gen_inputs:", outputs['gen_inputs'].shape)
     if hparams.nz:
         inputs_samples = {name: flatten(tf.tile(input[:, None], [1, hparams.num_samples] + [1] * (input.shape.ndims - 1)), 1, 2)
                           for name, input in inputs.items() if name != 'zs'}
@@ -931,23 +909,16 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
     def generator_loss_fn(self, inputs, outputs, targets):
         gen_losses = super(SAVPVideoPredictionModel, self).generator_loss_fn(inputs, outputs, targets)
 
+        idx = tf.where(tf.reshape(inputs['use_actions_array_encoded'], [-1]))
         if self.hparams.use_encoded_actions:
             if not self.hparams.train_with_partial_actions:
                 action_encoder_kl_loss = kl_loss(outputs['action_mu'], outputs['action_log_sigma_sq'])
             else:
-                idx = tf.where(tf.reshape(inputs['use_actions_array_encoded'], [-1]))
-                idx = tf.Print(idx, [tf.shape(inputs['use_actions_array_encoded'])], "idx", summarize=14)
-                idx = tf.Print(idx, [tf.shape(idx)], "idx:", summarize=14)
                 tmp_mu = tf.gather(tf.reshape(outputs['action_mu'], [-1]), idx)
- #               tmp_mu_shape = tmp_mu.shape
-                tmp_mu = tf.Print(tmp_mu, [tf.shape(tmp_mu)], "Tmp mu :", summarize=168*10)
                 tmp_log_sigma_sq = tf.gather(tf.reshape(outputs['action_log_sigma_sq'], [-1]), idx)
-#                tmp_log_sigma_sq_shape = tmp_log_sigma_sq.shape
-                tmp_log_sigma_sq = tf.Print(tmp_log_sigma_sq, [tf.shape(tmp_log_sigma_sq)], "tmp log_sigma sq", summarize=168*10)
                 
                 action_encoder_kl_loss = kl_loss(tmp_mu, tmp_log_sigma_sq)
 
-            action_encoder_kl_loss = tf.Print(action_encoder_kl_loss, [action_encoder_kl_loss], "Kl loss ")
             gen_losses['action_encoder_kl_loss'] = (action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
 
             if self.hparams.decode_actions:
@@ -963,7 +934,6 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             action_js_loss = js_loss(outputs['action_mu'], outputs['action_log_sigma_sq'],
                                      outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
 
-            action_js_loss = tf.Print(action_js_loss, [action_js_loss], "Action_js_loss")
             gen_losses['action_js_loss'] = (action_js_loss, self.hparams.action_js_loss)
 
             if self.hparams.decode_actions and self.hparams.decode_from_inverse:
