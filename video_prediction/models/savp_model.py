@@ -10,7 +10,7 @@ from video_prediction.models import pix2pix_model, mocogan_model, spectral_norm_
 from video_prediction.ops import lrelu, dense, pad2d, conv2d, conv_pool2d, flatten, tile_concat, pool2d
 from video_prediction.rnn_ops import BasicConv2DLSTMCell, Conv2DGRUCell
 from video_prediction.utils import tf_utils
-from video_prediction.losses import kl_loss, js_loss, l2_loss
+from video_prediction.losses import kl_loss, kl_loss_dist, js_loss, l2_loss
 
 # Amount to use when lower bounding tensors
 RELU_SHIFT = 1e-12
@@ -219,14 +219,11 @@ def inverse_model_fn(inputs, hparams=None):
 def image_encoder_fn(inputs, hparams=None):
     images = inputs['images'][0]
 
-    outputs = create_encoder(images,
-                             e_net=hparams.e_net,
-                             use_e_rnn=False,
-                             rnn=hparams.rnn,
-                             nz=2*hparams.encoded_action_size,
-                             nef=hparams.nef,
-                             n_layers=hparams.n_layers,
-                             norm_layer=hparams.norm_layer)
+    outputs = create_n_layer_encoder(images,
+                                     nz=2*hparams.encoded_action_size,
+                                     nef=hparams.nef,
+                                     n_layers=hparams.n_layers,
+                                     norm_layer=hparams.norm_layer)
     renamed_outputs = {'enc_image_mu': outputs['enc_zs_mu'],
                        'enc_image_log_sigma_sq': outputs['enc_zs_log_sigma_sq']}
     print("Outputs for image encoder", renamed_outputs.keys())
@@ -763,20 +760,21 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
 
         if hparams.learn_z_seq_prior:
             # Learn prior for robot data
-            inputs['r_prior_z_mu'] = tf.Variable(tf.zeros([hparams.encoded_action_size]))
-            inputs['r_prior_z_log_sigma_sq'] = tf.Variable(tf.zeros([hparams.encoded_action_size]))
+            r_prior_z_mu = tf.Variable(tf.zeros([hparams.encoded_action_size]))
+            r_prior_z_log_sigma_sq = tf.Variable(tf.zeros([hparams.encoded_action_size]))
 
-            enc_image_probs = image_encoder_fn(inputs, hparams=hparams)
+            with tf.variable_scope('image_encoder'):
+                enc_image_probs = image_encoder_fn(inputs, hparams=hparams)
 
-            eps = tf.random_normal([batch_size, hparams.encoded_image_size], 0, 1)
+            eps = tf.random_normal([batch_size, 2*hparams.encoded_action_size], 0, 1)
             enc_image = enc_image_probs['enc_image_mu'] + \
                 tf.sqrt(tf.exp(enc_image_probs['enc_image_log_sigma_sq'])) * eps
 
             # Learn prior for human data
-            lstm_cell = tf.nn.rnn_cell.LSTMCell(num_units=hparams.z_lstm_size)
+            lstm_cell = tf.nn.rnn_cell.LSTMCell(num_units=2 * hparams.encoded_action_size)
             with tf.variable_scope('z_lstm') as lstm_scope:
                 zero_state = lstm_cell.zero_state(batch_size=batch_size, dtype=tf.float32)
-                _, initial_state = lstm_cell(enc_image, zero_state)
+                _, state = lstm_cell(enc_image, zero_state)
 
                 lstm_scope.reuse_variables()
                 lstm_outputs = []
@@ -784,7 +782,9 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
                 for t in range(hparams.sequence_length - 1):
                     output, state = lstm_cell(output, state)
                     lstm_outputs.append(output)
-            lstm_outputs = tf.reshape(tf.concat(lstm_outputs, 1), [batch_size, hparams.sequence_length - 1, lstm_cell.output_size])
+            lstm_outputs = tf.convert_to_tensor(lstm_outputs)
+            h_prior_z_mu = lstm_outputs[:, :, :hparams.encoded_action_size]
+            h_prior_z_log_sigma_sq = lstm_outputs[:, :, hparams.encoded_action_size:]
 
         elif hparams.nda:
             if hparams.deterministic_da:
@@ -806,7 +806,8 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
                 da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
                 inputs['da'] = da
 
-        inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
+        with tf.variable_scope('inverse_model'):
+            inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
 
         if not hparams.deterministic_inverse:
             eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
@@ -888,6 +889,11 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
     if hparams.train_with_partial_actions:
         for k in inverse_action_probs:
             outputs[k] = inverse_action_probs[k]
+
+        outputs['r_prior_z_mu'] = r_prior_z_mu
+        outputs['r_prior_z_log_sigma_sq'] = r_prior_z_log_sigma_sq
+        outputs['h_prior_z_mu'] = h_prior_z_mu
+        outputs['h_prior_z_log_sigma_sq'] = h_prior_z_log_sigma_sq
 
     return gen_images, outputs
 
@@ -983,30 +989,50 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
     def generator_loss_fn(self, inputs, outputs, targets):
         gen_losses = super(SAVPVideoPredictionModel, self).generator_loss_fn(inputs, outputs, targets)
 
-        idx = tf.where(tf.reshape(inputs['use_actions_array_encoded'], [-1]))
+        r_idx = tf.where(tf.reshape(inputs['use_actions_array_encoded'], [-1]))
+        h_idx = tf.where(tf.reshape(~inputs['use_actions_array_encoded'], [-1]))
         if self.hparams.use_encoded_actions:
             if not self.hparams.train_with_partial_actions:
                 action_encoder_kl_loss = kl_loss(outputs['action_mu'], outputs['action_log_sigma_sq'])
             else:
-                tmp_mu = tf.gather(tf.reshape(outputs['action_mu'], [-1]), idx)
-                tmp_log_sigma_sq = tf.gather(tf.reshape(outputs['action_log_sigma_sq'], [-1]), idx)
+                tmp_mu = tf.gather(tf.reshape(outputs['action_mu'], [-1]), r_idx)
+                tmp_log_sigma_sq = tf.gather(tf.reshape(outputs['action_log_sigma_sq'], [-1]), r_idx)
                 
-                if not hparams.learn_z_seq_prior:
+                if not self.hparams.learn_z_seq_prior:
                     action_encoder_kl_loss = kl_loss(tmp_mu, tmp_log_sigma_sq)
                 else:
-                    action_encoder_kl_loss = kl_loss(tmp_mu, tmp_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
+                    action_encoder_kl_loss = kl_loss_dist(tmp_mu, tmp_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
 
             gen_losses['action_encoder_kl_loss'] = (action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
 
             if self.hparams.decode_actions:
-                tmp_decoded_actions = tf.gather(tf.reshape(outputs['decoded_actions'], [-1]), idx)
-                tmp_gt_actions = tf.gather(tf.reshape(inputs['actions'], [-1]), idx)
+                tmp_decoded_actions = tf.gather(tf.reshape(outputs['decoded_actions'], [-1]), r_idx)
+                tmp_gt_actions = tf.gather(tf.reshape(inputs['actions'], [-1]), r_idx)
                 decoded_action_loss = l2_loss(tmp_decoded_actions, tmp_gt_actions)
                 gen_losses['action_decoder_mse'] = (decoded_action_loss, self.hparams.action_decoder_mse_weight)
 
         if self.hparams.train_with_partial_actions and not self.hparams.deterministic_inverse:
             # TODO: Modify KL/JS loss for learned prior option
-            inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
+
+            if not self.hparams.learn_z_seq_prior:
+                inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
+            else:
+                tmp_mu = tf.gather(outputs['action_inverse_mu'], r_idx, axis=1)
+                tmp_log_sigma_sq = tf.gather(outputs['action_inverse_log_sigma_sq'], r_idx, axis=1)
+                r_kl_loss = kl_loss_dist(tmp_mu, tmp_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
+
+                if self.mode == 'train':
+                    tmp_mu_1 = tf.gather(outputs['action_inverse_mu'], h_idx, axis=1)
+                    tmp_log_sigma_sq_1 = tf.gather(outputs['action_inverse_log_sigma_sq'], h_idx, axis=1)
+
+                    tmp_mu_2 = tf.gather(outputs['h_prior_z_mu'], h_idx, axis=1)
+                    tmp_log_sigma_sq_2 = tf.gather(outputs['h_prior_z_log_sigma_sq'], h_idx, axis=1)
+
+                    h_kl_loss = kl_loss_dist(tmp_mu_1, tmp_log_sigma_sq_1, tmp_mu_2, tmp_log_sigma_sq_2)
+                    inverse_action_encoder_kl_loss = r_kl_loss + h_kl_loss
+                else:
+                    inverse_action_encoder_kl_loss = r_kl_loss
+
             gen_losses['action_inverse_encoder_kl_loss'] = (inverse_action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
 
             action_js_loss = js_loss(outputs['action_mu'], outputs['action_log_sigma_sq'],
@@ -1015,8 +1041,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             gen_losses['action_js_loss'] = (action_js_loss, self.hparams.action_js_loss)
 
             if self.hparams.decode_actions and self.hparams.decode_from_inverse:
-                tmp_decoded_inverse = tf.gather(tf.reshape(outputs['decoded_actions_inverse'], [-1]), idx)
-                tmp_gt_actions = tf.gather(tf.reshape(inputs['actions'], [-1]), idx)
+                tmp_decoded_inverse = tf.gather(tf.reshape(outputs['decoded_actions_inverse'], [-1]), r_idx)
+                tmp_gt_actions = tf.gather(tf.reshape(inputs['actions'], [-1]), r_idx)
 
                 decoded_inverse_action_loss = l2_loss(tmp_decoded_inverse, tmp_gt_actions)
                 gen_losses['action_decoder_inverse_mse'] = (decoded_inverse_action_loss, self.hparams.action_decoder_mse_weight)
