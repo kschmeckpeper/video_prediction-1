@@ -741,23 +741,24 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
         assert hparams.use_encoded_actions or hparams.deterministic_inverse, "Training without actions requires using encoded actions"
 
         if hparams.nda:
-            # da_mu = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
-            # da_log_sigma = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
+            if hparams.deterministic_da:
+                da = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
+                da_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da], axis=0)
+                tiled_da = tf.tile(tf.expand_dims(da_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+                inputs['da'] = tiled_da
+            else:
+                da_mu = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
+                da_log_sigma = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
 
-            # da_mu_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_mu], axis=0)
-            # tiled_da_mu = tf.tile(tf.expand_dims(da_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+                da_mu_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_mu], axis=0)
+                tiled_da_mu = tf.tile(tf.expand_dims(da_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
 
-            # da_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_log_sigma], axis=0)
-            # tiled_da_log_sigma = tf.tile(tf.expand_dims(da_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+                da_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_log_sigma], axis=0)
+                tiled_da_log_sigma = tf.tile(tf.expand_dims(da_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
 
-            # eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
-            # da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
-            # inputs['da'] = da
-
-            da = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
-            da_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da], axis=0)
-            tiled_da = tf.tile(tf.expand_dims(da_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
-            inputs['da'] = tiled_da
+                eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
+                da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
+                inputs['da'] = da
 
         inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
 
@@ -810,23 +811,24 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
             raise ValueError('outputs_enc has to be None when nz is 0.')
 
     if hparams.ndx:
-        # dx_mu = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
-        # dx_log_sigma = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
+        if hparams.deterministic_dx:
+            dx = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
+            dx_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx], axis=0)
+            tiled_dx = tf.tile(tf.expand_dims(dx_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+            inputs['dx'] = tiled_dx
+        else:
+            dx_mu = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
+            dx_log_sigma = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
 
-        # dx_mu_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_mu], axis=0)
-        # tiled_dx_mu = tf.tile(tf.expand_dims(dx_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+            dx_mu_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_mu], axis=0)
+            tiled_dx_mu = tf.tile(tf.expand_dims(dx_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
 
-        # dx_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_log_sigma], axis=0)
-        # tiled_dx_log_sigma = tf.tile(tf.expand_dims(dx_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+            dx_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx_log_sigma], axis=0)
+            tiled_dx_log_sigma = tf.tile(tf.expand_dims(dx_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
 
-        # eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
-        # dx = tiled_dx_mu + tf.exp(tiled_dx_log_sigma) * eps
-        # inputs['dx'] = dx
-
-        dx = [tf.Variable(tf.zeros([hparams.ndx])) for _ in range(2)]
-        dx_concat = tf.concat([tf.reshape(m, [1, hparams.ndx]) for m in dx], axis=0)
-        tiled_dx = tf.tile(tf.expand_dims(dx_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
-        inputs['dx'] = tiled_dx
+            eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
+            dx = tiled_dx_mu + tf.exp(tiled_dx_log_sigma) * eps
+            inputs['dx'] = dx
 
     cell = DNACell(inputs, hparams)
     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
@@ -930,7 +932,12 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             action_js_loss=0.1,
             deterministic_inverse=False,
             deterministic_inverse_mse=1.0,
-            decode_from_inverse=False
+            decode_from_inverse=False,
+            ndx=8,
+            deterministic_dx=False,
+            nda=8,
+            deterministic_da=False,
+            learn_z_seq_prior=False
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
