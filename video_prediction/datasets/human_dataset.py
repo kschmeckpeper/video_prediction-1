@@ -54,7 +54,7 @@ class HumanVideoDataset(SoftmotionVideoDataset):
  #                                                  tf.convert_to_tensor(extra_state, dtype=tf.float32)], axis=1)
         state_shape = state_like_seqs['images'].shape
         # Subtract 1 because there is 1 more image than action
-        action_like_seqs['actions'] = tf.zeros([state_shape[0]-1, self.hparams.adim])
+        action_like_seqs['actions'] = np.inf + tf.zeros([state_shape[0]-1, self.hparams.adim])
 #        action_shape = action_like_seqs['actions'].shape
         print("state shape:", state_shape)
         print("Using action:", self.hparams.use_action)
