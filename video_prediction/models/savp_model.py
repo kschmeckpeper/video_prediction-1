@@ -807,7 +807,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             if hparams.deterministic_da:
                 da = [tf.Variable(tf.zeros([hparams.nda]), name='d{}'.format(i)) for i in range(2)]
                 if mode != 'train':
-                    tiled_da = tf.tile(tf.reshape(da[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
+                    tiled_da = tf.tile(tf.reshape(da[1], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
                     inputs['da'] = tiled_da
                 else:
                     tiled_da = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da, repeats)]
@@ -818,7 +818,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                 da_log_sigma = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
 
                 if mode != 'train':
-                    tiled_da_mu = tf.tile(tf.reshape(da_mu[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
+                    tiled_da_mu = tf.tile(tf.reshape(da_mu[1], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
                     tiled_da_log_sigma = tf.tile(tf.reshape(da_log_sigma[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
                     da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
