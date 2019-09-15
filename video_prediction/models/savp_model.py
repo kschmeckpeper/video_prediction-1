@@ -802,23 +802,25 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
 
         elif hparams.nda:
             print("NDA,\n\n\n\n\n\n\n\n\n")
+            repeats = [9, 3]
+
             if hparams.deterministic_da:
                 da = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
-                da_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da], axis=0)
-                tiled_da = tf.tile(tf.expand_dims(da_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
-                inputs['da'] = tiled_da
+                tiled_da = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da, repeats)]
+                concat_da = tf.concat(tiled_da, axis=1)
+                inputs['da'] = concat_da
             else:
                 da_mu = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
                 da_log_sigma = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
 
-                da_mu_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_mu], axis=0)
-                tiled_da_mu = tf.tile(tf.expand_dims(da_mu_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+                tiled_da_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da_mu, repeats)]
+                tiled_da_log_sigma = [tf.tile(tf.reshape(s, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(da_log_sigma, repeats)]
 
-                da_log_sigma_concat = tf.concat([tf.reshape(m, [1, hparams.nda]) for m in da_log_sigma], axis=0)
-                tiled_da_log_sigma = tf.tile(tf.expand_dims(da_log_sigma_concat, 0), [hparams.sequence_length - 1, batch_size // 2, 1])
+                concat_da_mu = tf.concat(tiled_da_mu, axis=1)
+                concat_da_log_sigma = tf.concat(tiled_da_log_sigma, axis=1)
 
                 eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
-                da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
+                da = concat_da_mu + tf.exp(concat_da_log_sigma) * eps
                 inputs['da'] = da
 
         with tf.variable_scope('inverse_model'):
