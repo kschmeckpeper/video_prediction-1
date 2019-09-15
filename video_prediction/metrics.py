@@ -93,6 +93,9 @@ def peak_signal_to_noise_ratio(true, pred, keep_axis=None):
     """
     true = tf.convert_to_tensor(true)
     pred = tf.convert_to_tensor(pred)
+    print("true:", true.shape)
+    print("pred", pred.shape)
+    true = true[:, :pred.shape[1], :, :, :]
     ndims = max(true.shape.ndims, pred.shape.ndims)
     mse = mean_squared_error(true, pred, keep_axis=list(range(ndims))[:-3] + [ndims - 1])
     psnr = 10.0 * tf.log(1.0 / mse) / tf.cast(tf.log(10.0), mse.dtype)
@@ -114,6 +117,7 @@ def mean_squared_error(true, pred, keep_axis=None):
     """
     true = tf.convert_to_tensor(true)
     pred = tf.convert_to_tensor(pred)
+    true = true[:, :pred.shape[1], :, :, :]
     error = true - pred
     return tf.reduce_mean(tf.square(error), axis=_axis(keep_axis, error.shape.ndims))
 
@@ -140,6 +144,7 @@ def structural_similarity(X, Y, K1=0.01, K2=0.03, sigma=1.5, win_size=None,
     X = tf.convert_to_tensor(X)
     Y = tf.convert_to_tensor(Y)
 
+    X = X[:, :Y.shape[1], :, :, :]
     if win_size is None:
         if gaussian_weights:
             win_size = 11  # 11 to match Wang et. al. 2004

@@ -117,6 +117,7 @@ class BaseVideoPredictionModel(object):
         metrics = OrderedDict()
         target_images = targets
         gen_images = outputs['gen_images']
+        target_images = target_images[:, :gen_images.shape[1], :, :, :]
         metric_fns = [
             ('psnr', vp.metrics.peak_signal_to_noise_ratio),
             ('mse', vp.metrics.mean_squared_error),
@@ -148,6 +149,7 @@ class BaseVideoPredictionModel(object):
         if self.deterministic:
             target_images = targets
             gen_images = outputs['gen_images']
+            target_images = target_images[:, :gen_images.shape[1], :, :, :]
             for metric_name, metric_fn in metric_fns:
                 metric = metric_fn(target_images, gen_images, keep_axis=(0, 1))
                 eval_metrics['eval_%s/min' % metric_name] = metric
