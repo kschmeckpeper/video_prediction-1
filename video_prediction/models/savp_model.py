@@ -803,9 +803,8 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
         elif hparams.nda:
             print("NDA,\n\n\n\n\n\n\n\n\n")
             repeats = [9, 3]
-
             if hparams.deterministic_da:
-                da = [tf.Variable(tf.zeros([hparams.nda]), name='d{}'.format(i)) for i in range(2)]
+                da = [tf.get_variable('d{}'.format(i), tf.zeros([hparams.nda])) for i in range(2)]
                 if mode != 'train':
                     tiled_da = tf.tile(tf.reshape(da[1], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
                     inputs['da'] = tiled_da
@@ -814,8 +813,8 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     concat_da = tf.concat(tiled_da, axis=1)
                     inputs['da'] = concat_da
             else:
-                da_mu = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
-                da_log_sigma = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
+                da_mu = [tf.get_variable('d{}_mu'.format(i), tf.zeros([hparams.nda])) for _ in range(2)]
+                da_log_sigma = [tf.get_variable('d{}_log_sigma'.format(i), tf.zeros([hparams.nda])) for _ in range(2)]
 
                 if mode != 'train':
                     tiled_da_mu = tf.tile(tf.reshape(da_mu[1], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
