@@ -514,6 +514,9 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
             state_action.append(inputs['actions'])
             state_action_z.append(inputs['actions'])
 
+        if 'dx' in inputs:
+            state_action_z.append(inputs['dx'])
+
         if 'states' in inputs:
             state_action.append(state)
             # don't backpropagate the convnet through the state dynamics
@@ -804,26 +807,23 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             print("NDA,\n\n\n\n\n\n\n\n\n")
             repeats = [9, 3]
             if hparams.deterministic_da:
-                # da = [tf.get_variable('d{}'.format(i), tf.zeros([hparams.nda])) for i in range(2)]
-                da = [tf.get_variable('d0', initializer=tf.zeros([hparams.nda])),
-                      tf.get_variable('d1', initializer=tf.zeros([hparams.nda]))]
+                da = [tf.get_variable('da0', initializer=tf.zeros([hparams.nda])),
+                      tf.get_variable('da1', initializer=tf.zeros([hparams.nda]))]
                 if mode != 'train':
-                    tiled_da = tf.tile(tf.reshape(da[1], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
+                    tiled_da = tf.tile(tf.reshape(da[hparams.val_action_domain], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
                     inputs['da'] = tiled_da
                 else:
                     tiled_da = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da, repeats)]
                     concat_da = tf.concat(tiled_da, axis=1)
                     inputs['da'] = concat_da
             else:
-                # da_mu = [tf.get_variable('d{}_mu'.format(i), tf.zeros([hparams.nda])) for i in range(2)]
-                # da_log_sigma = [tf.get_variable('d{}_log_sigma'.format(i), tf.zeros([hparams.nda])) for i in range(2)]
-                da_mu = [tf.get_variable('d0_mu', initializer=tf.zeros([hparams.nda])),
-                         tf.get_variable('d1_mu', initializer=tf.zeros([hparams.nda]))]
-                da_log_sigma = [tf.get_variable('d0_log_sigma', initializer=tf.zeros([hparams.nda])),
-                                tf.get_variable('d1_log_sigma', initializer=tf.zeros([hparams.nda]))]
+                da_mu = [tf.get_variable('da0_mu', initializer=tf.zeros([hparams.nda])),
+                         tf.get_variable('da1_mu', initializer=tf.zeros([hparams.nda]))]
+                da_log_sigma = [tf.get_variable('da0_log_sigma', initializer=tf.zeros([hparams.nda])),
+                                tf.get_variable('da1_log_sigma', initializer=tf.zeros([hparams.nda]))]
 
                 if mode != 'train':
-                    tiled_da_mu = tf.tile(tf.reshape(da_mu[1], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
+                    tiled_da_mu = tf.tile(tf.reshape(da_mu[hparams.val_action_domain], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
                     tiled_da_log_sigma = tf.tile(tf.reshape(da_log_sigma[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
                     da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
@@ -862,6 +862,43 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=inputs['actions_inverse'])
 
         # TODO: Add domain variable for the visual shift?
+
+        if hparams.ndx:
+            print("NDX,\n\n\n\n\n\n\n\n\n")
+            repeats = [9, 3]
+            if hparams.deterministic_dx:
+                dx = [tf.get_variable('dx0', initializer=tf.zeros([hparams.ndx])),
+                      tf.get_variable('dx1', initializer=tf.zeros([hparams.ndx]))]
+                if mode != 'train':
+                    tiled_dx = tf.tile(tf.reshape(dx[hparams.val_visual_domain], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size, 1])
+                    inputs['dx'] = tiled_dx
+                else:
+                    tiled_dx = [tf.tile(tf.reshape(m, [1, 1, hparams.ndx]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(dx, repeats)]
+                    concat_dx = tf.concat(tiled_dx, axis=1)
+                    inputs['dx'] = concat_dx
+            else:
+                dx_mu = [tf.get_variable('dx0_mu', initializer=tf.zeros([hparams.ndx])),
+                         tf.get_variable('dx1_mu', initializer=tf.zeros([hparams.ndx]))]
+                dx_log_sigma = [tf.get_variable('dx0_log_sigma', initializer=tf.zeros([hparams.ndx])),
+                                tf.get_variable('dx1_log_sigma', initializer=tf.zeros([hparams.ndx]))]
+
+                if mode != 'train':
+                    tiled_dx_mu = tf.tile(tf.reshape(dx_mu[hparams.val_visual_domain], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size , 1])
+                    tiled_dx_log_sigma = tf.tile(tf.reshape(dx_log_sigma[0], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size, 1])
+                    eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
+                    dx = tiled_dx_mu + tf.exp(tiled_dx_log_sigma) * eps
+                    inputs['dx'] = dx
+                else:
+                    tiled_dx_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.ndx]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(dx_mu, repeats)]
+                    tiled_dx_log_sigma = [tf.tile(tf.reshape(s, [1, 1, hparams.ndx]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(dx_log_sigma, repeats)]
+
+                    concat_dx_mu = tf.concat(tiled_dx_mu, axis=1)
+                    concat_dx_log_sigma = tf.concat(tiled_dx_log_sigma, axis=1)
+
+                    eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
+                    dx = concat_dx_mu + tf.exp(concat_dx_log_sigma) * eps
+                    inputs['dx'] = dx
+
 
     if hparams.decode_actions and hparams.use_encoded_actions:
         decoded_actions = {}
@@ -1007,8 +1044,12 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             deterministic_inverse_mse=1.0,
             decode_from_inverse=False,
             use_domain_adaptation=False,
+            ndx=16,
+            deterministic_dx=False,
+            val_visual_domain=0,    # 0 for robot, 1 for human
             nda=8,
             deterministic_da=False,
+            val_action_domain=0,    # 0 for robot, 1 for human
             learn_z_seq_prior=False,
             kl_on_inverse=False,
             action_inverse_kl_weight=-1.0
@@ -1064,7 +1105,6 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 
 
         if self.hparams.train_with_partial_actions and not self.hparams.deterministic_inverse:
-            # TODO: Modify KL/JS loss for learned prior option
 
             if not self.hparams.learn_z_seq_prior:
                 inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
