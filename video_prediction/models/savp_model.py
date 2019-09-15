@@ -819,24 +819,24 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             else:
                 da_mu = [tf.get_variable('da0_mu', initializer=tf.zeros([hparams.nda])),
                          tf.get_variable('da1_mu', initializer=tf.zeros([hparams.nda]))]
-                da_log_sigma = [tf.get_variable('da0_log_sigma', initializer=tf.zeros([hparams.nda])),
-                                tf.get_variable('da1_log_sigma', initializer=tf.zeros([hparams.nda]))]
+                da_log_sigma_sq = [tf.get_variable('da0_log_sigma_sq', initializer=tf.zeros([hparams.nda])),
+                                tf.get_variable('da1_log_sigma_sq', initializer=tf.zeros([hparams.nda]))]
 
                 if mode != 'train':
                     tiled_da_mu = tf.tile(tf.reshape(da_mu[hparams.val_action_domain], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
-                    tiled_da_log_sigma = tf.tile(tf.reshape(da_log_sigma[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
+                    tiled_da_log_sigma_sq = tf.tile(tf.reshape(da_log_sigma_sq[hparams.val_action_domain], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
-                    da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
+                    da = tiled_da_mu + tf.sqrt(tf.exp(tiled_da_log_sigma_sq)) * eps
                     inputs['da'] = da
                 else:
                     tiled_da_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da_mu, repeats)]
-                    tiled_da_log_sigma = [tf.tile(tf.reshape(s, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(da_log_sigma, repeats)]
+                    tiled_da_log_sigma_sq = [tf.tile(tf.reshape(s, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(da_log_sigma_sq, repeats)]
 
                     concat_da_mu = tf.concat(tiled_da_mu, axis=1)
-                    concat_da_log_sigma = tf.concat(tiled_da_log_sigma, axis=1)
+                    concat_da_log_sigma_sq = tf.concat(tiled_da_log_sigma_sq, axis=1)
 
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
-                    da = concat_da_mu + tf.exp(concat_da_log_sigma) * eps
+                    da = concat_da_mu + tf.sqrt(tf.exp(concat_da_log_sigma_sq)) * eps
                     inputs['da'] = da
 
         with tf.variable_scope('inverse_model'):
@@ -879,24 +879,24 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             else:
                 dx_mu = [tf.get_variable('dx0_mu', initializer=tf.zeros([hparams.ndx])),
                          tf.get_variable('dx1_mu', initializer=tf.zeros([hparams.ndx]))]
-                dx_log_sigma = [tf.get_variable('dx0_log_sigma', initializer=tf.zeros([hparams.ndx])),
-                                tf.get_variable('dx1_log_sigma', initializer=tf.zeros([hparams.ndx]))]
+                dx_log_sigma_sq = [tf.get_variable('dx0_log_sigma_sq', initializer=tf.zeros([hparams.ndx])),
+                                tf.get_variable('dx1_log_sigma_sq', initializer=tf.zeros([hparams.ndx]))]
 
                 if mode != 'train':
                     tiled_dx_mu = tf.tile(tf.reshape(dx_mu[hparams.val_visual_domain], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size , 1])
-                    tiled_dx_log_sigma = tf.tile(tf.reshape(dx_log_sigma[0], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size, 1])
+                    tiled_dx_log_sigma_sq = tf.tile(tf.reshape(dx_log_sigma_sq[hparams.val_visual_domain], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size, 1])
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
-                    dx = tiled_dx_mu + tf.exp(tiled_dx_log_sigma) * eps
+                    dx = tiled_dx_mu + tf.sqrt(tf.exp(tiled_dx_log_sigma_sq)) * eps
                     inputs['dx'] = dx
                 else:
                     tiled_dx_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.ndx]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(dx_mu, repeats)]
-                    tiled_dx_log_sigma = [tf.tile(tf.reshape(s, [1, 1, hparams.ndx]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(dx_log_sigma, repeats)]
+                    tiled_dx_log_sigma_sq = [tf.tile(tf.reshape(s, [1, 1, hparams.ndx]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(dx_log_sigma_sq, repeats)]
 
                     concat_dx_mu = tf.concat(tiled_dx_mu, axis=1)
-                    concat_dx_log_sigma = tf.concat(tiled_dx_log_sigma, axis=1)
+                    concat_dx_log_sigma_sq = tf.concat(tiled_dx_log_sigma_sq, axis=1)
 
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
-                    dx = concat_dx_mu + tf.exp(concat_dx_log_sigma) * eps
+                    dx = concat_dx_mu + tf.sqrt(tf.exp(concat_dx_log_sigma_sq)) * eps
                     inputs['dx'] = dx
 
 
@@ -972,6 +972,18 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             outputs['h_prior_z_mu'] = h_prior_z_mu
             outputs['h_prior_z_log_sigma_sq'] = h_prior_z_log_sigma_sq
 
+        elif hparams.nda and not hparams.deterministic_da:
+            outputs['da0_mu'] = da_mu[0]
+            outputs['da0_log_sigma_sq'] = da_log_sigma_sq[0]
+            outputs['da1_mu'] = da_mu[1]
+            outputs['da1_log_sigma_sq'] = da_log_sigma_sq[1]
+
+        if hparams.ndx and not hparams.deterministic_dx:
+            outputs['dx0_mu'] = dx_mu[1]
+            outputs['dx0_log_sigma_sq'] = dx_log_sigma_sq[1]
+            outputs['dx1_mu'] = dx_mu[1]
+            outputs['dx1_log_sigma_sq'] = dx_log_sigma_sq[1]
+
     return gen_images, outputs
 
 
@@ -1046,10 +1058,12 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             use_domain_adaptation=False,
             ndx=16,
             deterministic_dx=False,
+            dx_kl_weight=0.001,
             val_visual_domain=0,    # 0 for robot, 1 for human
             nda=8,
             deterministic_da=False,
-            val_action_domain=0,    # 0 for robot, 1 for human
+            da_kl_weight=0.001,
+            val_action_domain=1,    # 0 for robot, 1 for human
             learn_z_seq_prior=False,
             kl_on_inverse=False,
             action_inverse_kl_weight=-1.0
@@ -1105,6 +1119,21 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 
 
         if self.hparams.train_with_partial_actions and not self.hparams.deterministic_inverse:
+
+            if self.hparams.nda and self.hparams.da_kl_weight:
+                r_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da0_log_sigma_sq'])
+                h_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da1_log_sigma_sq'])
+
+                da_kl_loss = r_da_kl_loss + h_da_kl_loss
+                gen_losses['da_kl_loss'] = (da_kl_loss, self.hparams.da_kl_weight)
+
+            if self.hparams.ndx and self.hparams.dx_kl_weight:
+                r_dx_kl_loss = kl_loss(outputs['dx0_mu'], outputs['dx0_log_sigma_sq'])
+                h_dx_kl_loss = kl_loss(outputs['dx1_mu'], outputs['dx1_log_sigma_sq'])
+
+                dx_kl_loss = r_dx_kl_loss + h_dx_kl_loss
+                gen_losses['dx_kl_loss'] = (dx_kl_loss, self.hparams.dx_kl_weight)
+
 
             if not self.hparams.learn_z_seq_prior:
                 inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
