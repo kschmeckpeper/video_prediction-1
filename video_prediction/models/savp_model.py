@@ -747,7 +747,7 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
         return outputs, new_states
 
 
-def generator_fn(inputs, outputs_enc=None, hparams=None):
+def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
     
 
     inputs['actions'] = inputs['actions'] / tf.constant([0.07, 0.07, 0.5, 0.15])
@@ -805,23 +805,34 @@ def generator_fn(inputs, outputs_enc=None, hparams=None):
             repeats = [9, 3]
 
             if hparams.deterministic_da:
-                da = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
-                tiled_da = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da, repeats)]
-                concat_da = tf.concat(tiled_da, axis=1)
-                inputs['da'] = concat_da
+                da = [tf.Variable(tf.zeros([hparams.nda]), name='d{}'.format(i)) for i in range(2)]
+                if mode != 'train':
+                    tiled_da = tf.tile(tf.reshape(da[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
+                    inputs['da'] = tiled_da
+                else:
+                    tiled_da = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da, repeats)]
+                    concat_da = tf.concat(tiled_da, axis=1)
+                    inputs['da'] = concat_da
             else:
                 da_mu = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
                 da_log_sigma = [tf.Variable(tf.zeros([hparams.nda])) for _ in range(2)]
 
-                tiled_da_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da_mu, repeats)]
-                tiled_da_log_sigma = [tf.tile(tf.reshape(s, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(da_log_sigma, repeats)]
+                if mode != 'train':
+                    tiled_da_mu = tf.tile(tf.reshape(da_mu[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
+                    tiled_da_log_sigma = tf.tile(tf.reshape(da_log_sigma[0], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
+                    eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
+                    da = tiled_da_mu + tf.exp(tiled_da_log_sigma) * eps
+                    inputs['da'] = da
+                else:
+                    tiled_da_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da_mu, repeats)]
+                    tiled_da_log_sigma = [tf.tile(tf.reshape(s, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for s, r in zip(da_log_sigma, repeats)]
 
-                concat_da_mu = tf.concat(tiled_da_mu, axis=1)
-                concat_da_log_sigma = tf.concat(tiled_da_log_sigma, axis=1)
+                    concat_da_mu = tf.concat(tiled_da_mu, axis=1)
+                    concat_da_log_sigma = tf.concat(tiled_da_log_sigma, axis=1)
 
-                eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
-                da = concat_da_mu + tf.exp(concat_da_log_sigma) * eps
-                inputs['da'] = da
+                    eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
+                    da = concat_da_mu + tf.exp(concat_da_log_sigma) * eps
+                    inputs['da'] = da
 
         with tf.variable_scope('inverse_model'):
             inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
@@ -991,7 +1002,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             deterministic_inverse_mse=1.0,
             decode_from_inverse=False,
             use_domain_adaptation=False,
-            nda=0,
+            nda=8,
             deterministic_da=False,
             learn_z_seq_prior=False,
             kl_on_inverse=False,

@@ -168,7 +168,7 @@ class BaseVideoPredictionModel(object):
 
             def accum_gen_images_and_metrics_fn(a, unused):
                 with tf.variable_scope(self.generator_scope, reuse=True):
-                    gen_images, _ = self.generator_fn(inputs)
+                    gen_images, _ = self.generator_fn(inputs, self.mode)
                 with tf.variable_scope('vgg', reuse=tf.AUTO_REUSE):
                     _, gen_vgg_features = video_prediction.utils.tf_utils.with_flat_batch(vgg_network.vgg16)(gen_images)
                 for name, metric_fn in metric_fns:
@@ -399,7 +399,7 @@ class VideoPredictionModel(BaseVideoPredictionModel):
         inputs, targets = nest.map_structure(transpose_batch_time, (inputs, targets))
 
         with tf.variable_scope(self.generator_scope) as gen_scope:
-            gen_images, gen_outputs = self.generator_fn(inputs)
+            gen_images, gen_outputs = self.generator_fn(inputs, self.mode)
 
         if self.encoder_fn:
             with tf.variable_scope(gen_scope):
@@ -407,7 +407,7 @@ class VideoPredictionModel(BaseVideoPredictionModel):
                     outputs_enc = self.encoder_fn(inputs)
             with tf.variable_scope(gen_scope, reuse=True):
                 with tf.name_scope(self.encoder_scope):
-                    gen_images_enc, gen_outputs_enc = self.generator_fn(inputs, outputs_enc=outputs_enc)
+                    gen_images_enc, gen_outputs_enc = self.generator_fn(inputs, self.mode, outputs_enc=outputs_enc)
                     gen_outputs_enc = OrderedDict([(k + '_enc', v) for k, v in gen_outputs_enc.items()])
         else:
             outputs_enc = {}
