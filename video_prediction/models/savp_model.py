@@ -1056,11 +1056,11 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             deterministic_inverse_mse=1.0,
             decode_from_inverse=False,
             use_domain_adaptation=False,
-            ndx=16,
+            ndx=0,#16,
             deterministic_dx=False,
             dx_kl_weight=0.001,
             val_visual_domain=0,    # 0 for robot, 1 for human
-            nda=8,
+            nda=0,#8,
             deterministic_da=False,
             da_kl_weight=0.001,
             val_action_domain=1,    # 0 for robot, 1 for human
@@ -1120,14 +1120,14 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 
         if self.hparams.train_with_partial_actions and not self.hparams.deterministic_inverse:
 
-            if self.hparams.nda and self.hparams.da_kl_weight:
+            if self.hparams.nda and self.hparams.da_kl_weight and not self.hparams.deterministic_da:
                 r_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da0_log_sigma_sq'])
                 h_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da1_log_sigma_sq'])
 
                 da_kl_loss = r_da_kl_loss + h_da_kl_loss
                 gen_losses['da_kl_loss'] = (da_kl_loss, self.hparams.da_kl_weight)
 
-            if self.hparams.ndx and self.hparams.dx_kl_weight:
+            if self.hparams.ndx and self.hparams.dx_kl_weight and not self.hparams.deterministic_dx:
                 r_dx_kl_loss = kl_loss(outputs['dx0_mu'], outputs['dx0_log_sigma_sq'])
                 h_dx_kl_loss = kl_loss(outputs['dx1_mu'], outputs['dx1_log_sigma_sq'])
 
