@@ -931,6 +931,15 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
         inputs['images'] = inputs['images'][:, :9, :, :, :]
         inputs['use_action'] = inputs['use_action'][:, :9, :]
         inputs['actions'] = inputs['actions'][:, :9, :]
+
+    elif self.mode == 'train' and hparams.predict_from_inverse:
+        hparams.batch_size = 21
+        inputs['images'] = tf.concat([inputs['images'], inputs['images'][:, :9, :, :, :]], axis=1)
+        inputs['use_action'] = tf.concat([inputs['use_action'], inputs['use_action'][:, :9, :]], axis=1)
+        inputs['actions'] = tf.concat([inputs['actions'], inputs['actions'][:, :9, :]], axis=1)
+        inputs['encoded_actions'] = tf.concat([inputs['encoded_actions'], additional_encoded_actions['encoded_actions_inverse'][:, :9, :]], axis=1)
+
+
     cell = DNACell(inputs, hparams)
 
     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
@@ -1066,7 +1075,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             val_action_domain=1,    # 0 for robot, 1 for human
             learn_z_seq_prior=False,
             kl_on_inverse=False,
-            action_inverse_kl_weight=-1.0
+            action_inverse_kl_weight=-1.0,
+            predict_from_inverse=False
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -1090,6 +1100,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             print(k, outputs[k].shape)
         if not self.hparams.train_with_partial_actions:
             targets = targets[:, :9, :, :, :]
+        elif self.mode == 'train' and hparams.predict_from_inverse:
+            targets = tf.concat([targets, targets[:, :9, :, :, :]], axis=1)
         gen_losses = super(SAVPVideoPredictionModel, self).generator_loss_fn(inputs, outputs, targets)
 
         #r_idx = tf.where(tf.reshape(inputs['use_actions_array_encoded'], [-1]))
