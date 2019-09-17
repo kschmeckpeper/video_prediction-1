@@ -932,12 +932,19 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
         inputs['use_action'] = inputs['use_action'][:, :9, :]
         inputs['actions'] = inputs['actions'][:, :9, :]
 
-    elif self.mode == 'train' and hparams.predict_from_inverse:
+    elif mode == 'train' and hparams.predict_from_inverse:
         hparams.batch_size = 21
         inputs['images'] = tf.concat([inputs['images'], inputs['images'][:, :9, :, :, :]], axis=1)
         inputs['use_action'] = tf.concat([inputs['use_action'], inputs['use_action'][:, :9, :]], axis=1)
         inputs['actions'] = tf.concat([inputs['actions'], inputs['actions'][:, :9, :]], axis=1)
         inputs['encoded_actions'] = tf.concat([inputs['encoded_actions'], additional_encoded_actions['encoded_actions_inverse'][:, :9, :]], axis=1)
+
+        if 'da' in inputs.keys():
+            inputs['da'] = tf.concat([inputs['da'], inputs['da'][:, :9, :]], axis=1)
+        if 'dx' in inputs.keys():
+            inputs['dx'] = tf.concat([inputs['dx'], inputs['dx'][:, :9, :]], axis=1)
+        for k in inputs.keys():
+            print(k, inputs[k].shape)
 
 
     cell = DNACell(inputs, hparams)
@@ -1100,7 +1107,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             print(k, outputs[k].shape)
         if not self.hparams.train_with_partial_actions:
             targets = targets[:, :9, :, :, :]
-        elif self.mode == 'train' and hparams.predict_from_inverse:
+        elif self.mode == 'train' and self.hparams.predict_from_inverse:
             targets = tf.concat([targets, targets[:, :9, :, :, :]], axis=1)
         gen_losses = super(SAVPVideoPredictionModel, self).generator_loss_fn(inputs, outputs, targets)
 
