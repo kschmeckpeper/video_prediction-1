@@ -1107,8 +1107,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             print(k, outputs[k].shape)
         if not self.hparams.train_with_partial_actions:
             targets = targets[:, :9, :, :, :]
-        elif self.mode == 'train' and self.hparams.predict_from_inverse:
-            targets = tf.concat([targets, targets[:, :9, :, :, :]], axis=1)
+#        elif self.mode == 'train' and self.hparams.predict_from_inverse:
+#            targets = tf.concat([targets, targets[:, :9, :, :, :]], axis=1)
         gen_losses = super(SAVPVideoPredictionModel, self).generator_loss_fn(inputs, outputs, targets)
 
         #r_idx = tf.where(tf.reshape(inputs['use_actions_array_encoded'], [-1]))
