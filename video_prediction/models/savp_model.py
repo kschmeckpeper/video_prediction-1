@@ -785,7 +785,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
 
             eps = tf.random_normal([batch_size, 2*hparams.encoded_action_size], 0, 1)
             enc_image = enc_image_probs['enc_image_mu'] + \
-                tf.sqrt(tf.exp(enc_image_probs['enc_image_log_sigma_sq'])) * eps
+                tf.exp(enc_image_probs['enc_image_log_sigma_sq'] / 2.0) * eps
 
             # Learn prior for human data
             lstm_cell = tf.nn.rnn_cell.LSTMCell(num_units=2 * hparams.encoded_action_size)
@@ -826,7 +826,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     tiled_da_mu = tf.tile(tf.reshape(da_mu[hparams.val_action_domain], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size , 1])
                     tiled_da_log_sigma_sq = tf.tile(tf.reshape(da_log_sigma_sq[hparams.val_action_domain], [1, 1, hparams.nda]), [hparams.sequence_length - 1, batch_size, 1])
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
-                    da = tiled_da_mu + tf.sqrt(tf.exp(tiled_da_log_sigma_sq)) * eps
+                    da = tiled_da_mu + tf.exp(tiled_da_log_sigma_sq / 2.0) * eps
                     inputs['da'] = da
                 else:
                     tiled_da_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.nda]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(da_mu, repeats)]
@@ -836,7 +836,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     concat_da_log_sigma_sq = tf.concat(tiled_da_log_sigma_sq, axis=1)
 
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nda], 0, 1)
-                    da = concat_da_mu + tf.sqrt(tf.exp(concat_da_log_sigma_sq)) * eps
+                    da = concat_da_mu + tf.exp(concat_da_log_sigma_sq / 2.0) * eps
                     inputs['da'] = da
 
         with tf.variable_scope('inverse_model'):
@@ -846,7 +846,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
             additional_encoded_actions = {}
             additional_encoded_actions['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
-                tf.sqrt(tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'])) * eps
+                tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'] / 2.0) * eps
             additional_encoded_actions['original_encoded_actions'] = inputs['encoded_actions'] - 0
 
 #            inputs['encoded_actions'] = tf.where(use_actions, x=inputs['encoded_actions'], y=inputs['encoded_actions_inverse'])
@@ -886,7 +886,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     tiled_dx_mu = tf.tile(tf.reshape(dx_mu[hparams.val_visual_domain], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size , 1])
                     tiled_dx_log_sigma_sq = tf.tile(tf.reshape(dx_log_sigma_sq[hparams.val_visual_domain], [1, 1, hparams.ndx]), [hparams.sequence_length - 1, batch_size, 1])
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
-                    dx = tiled_dx_mu + tf.sqrt(tf.exp(tiled_dx_log_sigma_sq)) * eps
+                    dx = tiled_dx_mu + tf.exp(tiled_dx_log_sigma_sq / 2.0) * eps
                     inputs['dx'] = dx
                 else:
                     tiled_dx_mu = [tf.tile(tf.reshape(m, [1, 1, hparams.ndx]), [hparams.sequence_length - 1, r, 1]) for m, r in zip(dx_mu, repeats)]
@@ -896,7 +896,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     concat_dx_log_sigma_sq = tf.concat(tiled_dx_log_sigma_sq, axis=1)
 
                     eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.ndx], 0, 1)
-                    dx = concat_dx_mu + tf.sqrt(tf.exp(concat_dx_log_sigma_sq)) * eps
+                    dx = concat_dx_mu + tf.exp(concat_dx_log_sigma_sq / 2.0) * eps
                     inputs['dx'] = dx
 
 
@@ -919,13 +919,12 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                 enc_zs_mu = outputs_enc['enc_zs_mu']
                 enc_zs_log_sigma_sq = outputs_enc['enc_zs_log_sigma_sq']
                 eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.nz], 0, 1)
-                zs = enc_zs_mu + tf.sqrt(tf.exp(enc_zs_log_sigma_sq)) * eps
+                zs = enc_zs_mu + tf.exp(enc_zs_log_sigma_sq / 2.0) * eps
             return zs
         inputs['zs'] = sample_zs()
     else:
         if outputs_enc is not None:
             raise ValueError('outputs_enc has to be None when nz is 0.')
-    print("Input:", inputs.keys())
     if not hparams.train_with_partial_actions:
         hparams.batch_size = 9
         inputs['images'] = inputs['images'][:, :9, :, :, :]
@@ -943,14 +942,13 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             inputs['da'] = tf.concat([inputs['da'], inputs['da'][:, :9, :]], axis=1)
         if 'dx' in inputs.keys():
             inputs['dx'] = tf.concat([inputs['dx'], inputs['dx'][:, :9, :]], axis=1)
-        for k in inputs.keys():
-            print(k, inputs[k].shape)
 
 
     cell = DNACell(inputs, hparams)
 
     outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32,
                                    swap_memory=False, time_major=True)
+
     if hparams.nz:
         inputs_samples = {name: flatten(tf.tile(input[:, None], [1, hparams.num_samples] + [1] * (input.shape.ndims - 1)), 1, 2)
                           for name, input in inputs.items() if name != 'zs'}
@@ -1102,9 +1100,6 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
         return hparams
     
     def generator_loss_fn(self, inputs, outputs, targets):
-        print("Targets:", outputs.keys())
-        for k in outputs.keys():
-            print(k, outputs[k].shape)
         if not self.hparams.train_with_partial_actions:
             targets = targets[:, :9, :, :, :]
 #        elif self.mode == 'train' and self.hparams.predict_from_inverse:
