@@ -106,8 +106,14 @@ class BaseVideoPredictionModel(object):
         return parsed_hparams
 
     def build_graph(self, inputs, targets=None):
+#        if self.mode == 'train' and self.hparams.predict_from_inverse:
+#            print("Build graph smaller:", targets.shape)
+#            targets = tf.concat([targets, targets[:, :9, :, :, :]], axis=1)
+
         self.inputs = inputs
         self.targets = targets
+
+        
 
         # call it once here to create the variables
         with tf.variable_scope('vgg'):
@@ -168,7 +174,7 @@ class BaseVideoPredictionModel(object):
 
             def accum_gen_images_and_metrics_fn(a, unused):
                 with tf.variable_scope(self.generator_scope, reuse=True):
-                    gen_images, _ = self.generator_fn(inputs)
+                    gen_images, _ = self.generator_fn(inputs, self.mode)
                 with tf.variable_scope('vgg', reuse=tf.AUTO_REUSE):
                     _, gen_vgg_features = video_prediction.utils.tf_utils.with_flat_batch(vgg_network.vgg16)(gen_images)
                 for name, metric_fn in metric_fns:
@@ -397,9 +403,14 @@ class VideoPredictionModel(BaseVideoPredictionModel):
         """
         # batch-major to time-major
         inputs, targets = nest.map_structure(transpose_batch_time, (inputs, targets))
-
+        
+        if self.mode == 'train' and self.hparams.predict_from_inverse:
+            print("tower_fn:", targets.shape)
+            if targets.shape[1] == 12:
+                targets = tf.concat([targets, targets[:, :9, :, :, :]], axis=1)
+                print("reshaped to:", targets.shape)
         with tf.variable_scope(self.generator_scope) as gen_scope:
-            gen_images, gen_outputs = self.generator_fn(inputs)
+            gen_images, gen_outputs = self.generator_fn(inputs, self.mode)
 
         if self.encoder_fn:
             with tf.variable_scope(gen_scope):
@@ -407,7 +418,7 @@ class VideoPredictionModel(BaseVideoPredictionModel):
                     outputs_enc = self.encoder_fn(inputs)
             with tf.variable_scope(gen_scope, reuse=True):
                 with tf.name_scope(self.encoder_scope):
-                    gen_images_enc, gen_outputs_enc = self.generator_fn(inputs, outputs_enc=outputs_enc)
+                    gen_images_enc, gen_outputs_enc = self.generator_fn(inputs, self.mode, outputs_enc=outputs_enc)
                     gen_outputs_enc = OrderedDict([(k + '_enc', v) for k, v in gen_outputs_enc.items()])
         else:
             outputs_enc = {}
@@ -484,6 +495,11 @@ class VideoPredictionModel(BaseVideoPredictionModel):
                     d_losses = self.discriminator_loss_fn(inputs, outputs, targets)
                     print_loss_info(d_losses, inputs, outputs, targets)
                 with tf.name_scope("generator_loss"):
+                    for k in inputs.keys():
+                        print("inputs:", k, inputs[k].shape)
+                    for k in outputs.keys():
+                        print("outputs", k, outputs[k].shape)
+                    print("targets:", targets.shape)
                     g_losses = self.generator_loss_fn(inputs, outputs, targets)
                     print_loss_info(g_losses, inputs, outputs, targets)
                     if discrim_outputs_real_post or discrim_outputs_fake_post or \
@@ -501,6 +517,11 @@ class VideoPredictionModel(BaseVideoPredictionModel):
                 g_losses = {}
                 g_losses_post = {}
             with tf.name_scope("metrics"):
+                for k in inputs.keys():
+                    print("input:", k, inputs[k].shape)
+                for k in outputs.keys():
+                    print("outputs:", k, outputs[k].shape)
+                print("targets:", targets.shape)
                 metrics = self.metrics_fn(inputs, outputs, targets)
             with tf.name_scope("eval_outputs_and_metrics"):
                 eval_outputs, eval_metrics = self.eval_outputs_and_metrics_fn(inputs, outputs, targets)
@@ -522,6 +543,8 @@ class VideoPredictionModel(BaseVideoPredictionModel):
         return outputs_tuple, losses_tuple, metrics_tuple
 
     def build_graph(self, inputs, targets=None):
+
+
         BaseVideoPredictionModel.build_graph(self, inputs, targets=targets)
 
         global_step = tf.train.get_or_create_global_step()
