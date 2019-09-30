@@ -1139,7 +1139,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 
             if self.hparams.nda and self.hparams.da_kl_weight and not self.hparams.deterministic_da:
                 r_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da0_log_sigma_sq'])
-                h_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da1_log_sigma_sq'])
+                h_da_kl_loss = kl_loss(outputs['da1_mu'], outputs['da1_log_sigma_sq'])
 
                 da_kl_loss = r_da_kl_loss + h_da_kl_loss
                 gen_losses['da_kl_loss'] = (da_kl_loss, self.hparams.da_kl_weight)
