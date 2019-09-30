@@ -202,9 +202,9 @@ def inverse_model_fn(inputs, hparams=None):
     images = inputs['images']
     image_pairs = tf.concat([images[:hparams.sequence_length - 1],
                              images[1:hparams.sequence_length]], axis=-1)
-    if 'da' in inputs:
+    if 'dx' in inputs:
         image_pairs = tile_concat([image_pairs,
-                                   tf.expand_dims(tf.expand_dims(inputs['da'], axis=-2), axis=-2)], axis=-1)
+                                   tf.expand_dims(tf.expand_dims(inputs['dx'], axis=-2), axis=-2)], axis=-1)
     outputs = create_encoder(image_pairs,
                              e_net=hparams.inverse_model_net,
                              use_e_rnn=hparams.use_inverse_model_rnn,
@@ -996,8 +996,8 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                 outputs['da1_log_sigma_sq'] = da_log_sigma_sq[1]
 
             if hparams.ndx and not hparams.deterministic_dx:
-                outputs['dx0_mu'] = dx_mu[1]
-                outputs['dx0_log_sigma_sq'] = dx_log_sigma_sq[1]
+                outputs['dx0_mu'] = dx_mu[0]
+                outputs['dx0_log_sigma_sq'] = dx_log_sigma_sq[0]
                 outputs['dx1_mu'] = dx_mu[1]
                 outputs['dx1_log_sigma_sq'] = dx_log_sigma_sq[1]
 
@@ -1067,6 +1067,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             action_encoder_norm_layer='none',
             encoded_action_size=4,
             action_encoder_kl_weight=0.1,
+            inverse_action_encoder_kl_weight=0.1,
             train_with_partial_actions=False,
             action_js_loss=0.1,
             deterministic_inverse=False,
@@ -1139,7 +1140,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 
             if self.hparams.nda and self.hparams.da_kl_weight and not self.hparams.deterministic_da:
                 r_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da0_log_sigma_sq'])
-                h_da_kl_loss = kl_loss(outputs['da0_mu'], outputs['da1_log_sigma_sq'])
+                h_da_kl_loss = kl_loss(outputs['da1_mu'], outputs['da1_log_sigma_sq'])
 
                 da_kl_loss = r_da_kl_loss + h_da_kl_loss
                 gen_losses['da_kl_loss'] = (da_kl_loss, self.hparams.da_kl_weight)
@@ -1176,7 +1177,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
                 else:
                     inverse_action_encoder_kl_loss = r_kl_loss
 
-            gen_losses['action_inverse_encoder_kl_loss'] = (inverse_action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
+            gen_losses['action_inverse_encoder_kl_loss'] = (inverse_action_encoder_kl_loss, self.hparams.inverse_action_encoder_kl_weight)
 
             tmp_inverse_mu = outputs['action_inverse_mu'][:, :9, :]
             tmp_inverse_log_sigma_sq = outputs['action_inverse_log_sigma_sq'][:, :9, :]
