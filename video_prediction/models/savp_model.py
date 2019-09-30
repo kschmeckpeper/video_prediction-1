@@ -205,6 +205,9 @@ def inverse_model_fn(inputs, hparams=None):
     if 'dx' in inputs:
         image_pairs = tile_concat([image_pairs,
                                    tf.expand_dims(tf.expand_dims(inputs['dx'], axis=-2), axis=-2)], axis=-1)
+    if 'da' in inputs:
+        image_pairs = tile_concat([image_pairs,
+                                   tf.expand_dims(tf.expand_dims(inputs['da'], axis=-2), axis=-2)], axis=-1)
     outputs = create_encoder(image_pairs,
                              e_net=hparams.inverse_model_net,
                              use_e_rnn=hparams.use_inverse_model_rnn,
