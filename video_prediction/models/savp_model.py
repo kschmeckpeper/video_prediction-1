@@ -845,29 +845,6 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     da = concat_da_mu + tf.exp(concat_da_log_sigma_sq / 2.0) * eps
                     inputs['da'] = da
 
-        if mode != 'test':
-            with tf.variable_scope('inverse_model'):
-                inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
-
-            if not hparams.deterministic_inverse:
-                eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
-                additional_encoded_actions = {}
-                additional_encoded_actions['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
-                    tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'] / 2.0) * eps
-                additional_encoded_actions['original_encoded_actions'] = inputs['encoded_actions'] - 0
-
-    #            inputs['encoded_actions'] = tf.where(use_actions, x=inputs['encoded_actions'], y=inputs['encoded_actions_inverse'])
-                inputs['encoded_actions'] = tf.concat([inputs['encoded_actions'], additional_encoded_actions['encoded_actions_inverse'][:, 9:, :]], axis=1)
-                # print("Encoded actions.shape", inputs['encoded_actions'].shape)
-            else:
-                assert not hparams.use_encoded_actions
-                inputs['actions_inverse'] = inverse_action_probs['action_inverse_mu']
-
-                use_actions = tf.reshape(inputs['use_action'], [-1, 1])
-                use_actions = tf.tile(use_actions, [1, inputs['actions'].shape[-1]])
-                use_actions = tf.reshape(use_actions, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
-                inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=inputs['actions_inverse'])
-
         if hparams.ndx:
             # print("NDX,\n\n\n\n\n\n\n\n\n")
             repeats = [9, 3]
@@ -904,6 +881,28 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     dx = concat_dx_mu + tf.exp(concat_dx_log_sigma_sq / 2.0) * eps
                     inputs['dx'] = dx
 
+        if mode != 'test':
+            with tf.variable_scope('inverse_model'):
+                inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
+
+            if not hparams.deterministic_inverse:
+                eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
+                additional_encoded_actions = {}
+                additional_encoded_actions['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
+                    tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'] / 2.0) * eps
+                additional_encoded_actions['original_encoded_actions'] = inputs['encoded_actions'] - 0
+
+    #            inputs['encoded_actions'] = tf.where(use_actions, x=inputs['encoded_actions'], y=inputs['encoded_actions_inverse'])
+                inputs['encoded_actions'] = tf.concat([inputs['encoded_actions'], additional_encoded_actions['encoded_actions_inverse'][:, 9:, :]], axis=1)
+                # print("Encoded actions.shape", inputs['encoded_actions'].shape)
+            else:
+                assert not hparams.use_encoded_actions
+                inputs['actions_inverse'] = inverse_action_probs['action_inverse_mu']
+
+                use_actions = tf.reshape(inputs['use_action'], [-1, 1])
+                use_actions = tf.tile(use_actions, [1, inputs['actions'].shape[-1]])
+                use_actions = tf.reshape(use_actions, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
+                inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=inputs['actions_inverse'])
 
     if mode != 'test':
         if hparams.decode_actions and hparams.use_encoded_actions:
