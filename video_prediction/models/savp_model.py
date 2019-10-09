@@ -492,6 +492,7 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
         norm_layer = ops.get_norm_layer(self.hparams.norm_layer)
         downsample_layer = ops.get_downsample_layer(self.hparams.downsample_layer)
         upsample_layer = ops.get_upsample_layer(self.hparams.upsample_layer)
+        conv_layer = ops.get_downsample_layer('conv2d')
         image_shape = inputs['images'].get_shape().as_list()
         batch_size, height, width, color_channels = image_shape
         conv_rnn_states = states['conv_rnn_states']
@@ -561,9 +562,17 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                     kernel_size = (3, 3)
                 if self.hparams.where_add == 'all' or (self.hparams.where_add == 'input' and i == 0):
                     h = tile_concat([h, state_action_z[:, None, None, :]], axis=-1)
+                print("h:", h)
+                print("out_channels:", out_channels)
                 h = downsample_layer(h, out_channels, kernel_size=kernel_size, strides=(2, 2))
                 h = norm_layer(h)
                 h = tf.nn.relu(h)
+                for j in range(self.hparams.extra_depth):
+                    with tf.variable_scope('extra%d' % j):
+                        print("Extra depth:", h)
+                        h = conv_layer(h, out_channels, kernel_size=kernel_size, strides=(1, 1))
+                        h = norm_layer(h)
+                        h = tf.nn.relu(h)
             if use_conv_rnn:
                 conv_rnn_state = conv_rnn_states[len(new_conv_rnn_states)]
                 with tf.variable_scope('%s_h%d' % (self.hparams.conv_rnn, i)):
@@ -587,6 +596,11 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
                 h = upsample_layer(h, out_channels, kernel_size=(3, 3), strides=(2, 2))
                 h = norm_layer(h)
                 h = tf.nn.relu(h)
+                for j in range(self.hparams.extra_depth):
+                    with tf.variable_scope('extra%d' % j):
+                        h = conv_layer(h, out_channels, kernel_size=kernel_size, strides=(1, 1))
+                        h = norm_layer(h)
+                        h = tf.nn.relu(h)
             if use_conv_rnn:
                 conv_rnn_state = conv_rnn_states[len(new_conv_rnn_states)]
                 with tf.variable_scope('%s_h%d' % (self.hparams.conv_rnn, len(layers))):
@@ -1088,7 +1102,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             learn_z_seq_prior=False,
             kl_on_inverse=False,
             action_inverse_kl_weight=-1.0,
-            predict_from_inverse=False
+            predict_from_inverse=False,
+            extra_depth=0
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
