@@ -769,8 +769,8 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
 
 def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
     
-
-    inputs['actions'] = inputs['actions'] / tf.constant([0.07, 0.07, 0.5, 0.15])
+    if hparams.rescale_actions:
+        inputs['actions'] = inputs['actions'] / tf.constant([0.07, 0.07, 0.5, 0.15])
 
     # if hparams is not None:
         # print("generator hparams:", hparams)
@@ -1103,7 +1103,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             kl_on_inverse=False,
             action_inverse_kl_weight=-1.0,
             predict_from_inverse=False,
-            extra_depth=0
+            extra_depth=0,
+            rescale_actions=True
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
