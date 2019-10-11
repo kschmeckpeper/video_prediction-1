@@ -187,11 +187,11 @@ def action_encoder_fn(inputs, hparams=None, norm=None):
             out = tf.nn.relu(out)
     with tf.variable_scope('action_encoder_out_mu'):
         action_mu = dense(out, hparams.encoded_action_size, kernel_init=None, bias_init=None)
-        action_mu = tf.reshape(action_mu, [inputs['actions'].shape[0], -1, inputs['actions'].shape[2]])
+        action_mu = tf.reshape(action_mu, [inputs['actions'].shape[0], -1, hparams.encoded_action_size])
     with tf.variable_scope('action_encoder_out_sigma_sq'):
         action_log_sigma_sq = dense(out, hparams.encoded_action_size)
 #        action_log_sigma_sq = tf.clip_by_value(action_log_sigma_sq, -10, 10)
-        action_log_sigma_sq = tf.reshape(action_log_sigma_sq, [inputs['actions'].shape[0], -1, inputs['actions'].shape[2]])
+        action_log_sigma_sq = tf.reshape(action_log_sigma_sq, [inputs['actions'].shape[0], -1, hparams.encoded_action_size])
 
 
     outputs = {'action_log_sigma_sq': action_log_sigma_sq,
@@ -202,10 +202,10 @@ def inverse_model_fn(inputs, hparams=None):
     images = inputs['images']
     image_pairs = tf.concat([images[:hparams.sequence_length - 1],
                              images[1:hparams.sequence_length]], axis=-1)
-    if 'dx' in inputs:
+    if 'dx' in inputs and hparams.add_dx_to_inverse:
         image_pairs = tile_concat([image_pairs,
                                    tf.expand_dims(tf.expand_dims(inputs['dx'], axis=-2), axis=-2)], axis=-1)
-    if 'da' in inputs:
+    if 'da' in inputs and hparams.add_da_to_inverse:
         image_pairs = tile_concat([image_pairs,
                                    tf.expand_dims(tf.expand_dims(inputs['da'], axis=-2), axis=-2)], axis=-1)
     outputs = create_encoder(image_pairs,
@@ -922,7 +922,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
     if mode != 'test':
         if hparams.decode_actions and hparams.use_encoded_actions:
             decoded_actions = {}
-            decoded_actions['decoded_actions'] = action_decoder_fn(inputs['encoded_actions'], inputs['encoded_actions'].shape, hparams=hparams)
+            decoded_actions['decoded_actions'] = action_decoder_fn(inputs['encoded_actions'], inputs['actions'].shape, hparams=hparams)
     #        decoded_actions['decoded_actions'] = action_probs['action_mu']
             if hparams.decode_from_inverse:
                 # print("Decoding from inverse:")
@@ -1103,8 +1103,10 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             kl_on_inverse=False,
             action_inverse_kl_weight=-1.0,
             predict_from_inverse=False,
-            extra_depth=0,
-            rescale_actions=True
+            rescale_actions=True,
+            add_dx_to_inverse=True,
+            add_da_to_inverse=True,
+            extra_depth=0
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
