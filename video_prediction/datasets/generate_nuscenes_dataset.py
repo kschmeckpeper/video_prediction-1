@@ -20,11 +20,19 @@ def _floats_feature(value):
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
 
-def save_tf_record(save_path, images, actions):
+def save_tf_record(save_path, images, actions, image_size):
+    try:
+        loaded_images = []
+        for i in range(len(images)):        
+            loaded_images.append([cv2.resize(cv2.imread(img), image_size, interpolation=cv2.INTER_AREA) for img in images[i]])
+    except:
+        return
+
     writer = tf.python_io.TFRecordWriter(save_path)
 
     for i in range(len(images)):
-        featurized_images = [_bytes_feature(image.tostring()) for image in images[i]]
+
+        featurized_images = [_bytes_feature(image.tostring()) for image in loaded_images[i]]
         featurized_actions = [_floats_feature(action) for action in actions[i]]
 
         feature = {}
@@ -42,7 +50,7 @@ def  main():
     parser.add_argument('--image_size', nargs='+', default=[64, 48], type=int)
     parser.add_argument('--traj_per_record', default=10, type=int)
     parser.add_argument('--sequence_length', default=20, type=int)
-    parser.add_argument('--val', action='store_true', dest='val')
+    parser.add_argument('--train_fraction', default=10, type=int)
     parser.add_argument('--starting_index', type=int, default=0)
     args = parser.parse_args()
     args.image_size = tuple(args.image_size)
@@ -86,9 +94,10 @@ def  main():
             prev_trans = np.array(ego_pose['translation'])
             prev_timestamp = ego_pose['timestamp']
 
-            img = cv2.imread(join(args.dataset_path, data['filename']))
-            img_reshaped = cv2.resize(img, args.image_size, interpolation=cv2.INTER_AREA)
-            curr_images.append(img_reshaped)
+#            img = cv2.imread(join(args.dataset_path, data['filename']))
+#            img_reshaped = cv2.resize(img, args.image_size, interpolation=cv2.INTER_AREA)
+#            curr_images.append(img_reshaped)
+            curr_images.append(join(args.dataset_path, data['filename']))
             curr_actions.append([rot, trans[0], trans[1]])
 
             if len(curr_images) == args.sequence_length:
@@ -115,12 +124,11 @@ def  main():
             start = i*args.traj_per_record
             end = min((i + 1)* args.traj_per_record, len(images[k]))
             current_record = "traj_{}_to_{}.tfrecords".format(start + args.starting_index, end + args.starting_index)
-            if args.val:
+            if i % args.train_fraction == 0:
                 current_record = join(args.out_path, k, "val", current_record)
             else:
                 current_record = join(args.out_path, k, "train", current_record)
-            print(current_record)
-            save_tf_record(current_record, images[k][start:end], actions[k][start:end])            
+            save_tf_record(current_record, images[k][start:end], actions[k][start:end], args.image_size)
 
 if __name__ == '__main__':
 
