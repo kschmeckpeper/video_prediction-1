@@ -24,7 +24,7 @@ def save_tf_record(save_path, images, actions, image_size):
     try:
         loaded_images = []
         for i in range(len(images)):        
-            loaded_images.append([cv2.resize(cv2.imread(img), image_size, interpolation=cv2.INTER_AREA) for img in images[i]])
+            loaded_images.append([cv2.resize(cv2.imread(img), image_size, interpolation=cv2.INTER_AREA)[:, :, ::-1] for img in images[i]])
     except:
         return
 
