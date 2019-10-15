@@ -406,9 +406,7 @@ class VideoPredictionModel(BaseVideoPredictionModel):
         
         if self.mode == 'train' and self.hparams.predict_from_inverse:
             print("tower_fn:", targets.shape)
-            if targets.shape[1] == 12:
-                targets = tf.concat([targets, targets[:, :9, :, :, :]], axis=1)
-                print("reshaped to:", targets.shape)
+            targets = tf.concat([targets, targets[:, :self.hparams.num_supervised, :, :, :]], axis=1)
         with tf.variable_scope(self.generator_scope) as gen_scope:
             gen_images, gen_outputs = self.generator_fn(inputs, self.mode)
 
@@ -683,6 +681,8 @@ class VideoPredictionModel(BaseVideoPredictionModel):
             gen_images = outputs.get('gen_images_enc', outputs['gen_images'])
             target_images = targets
         if hparams.l1_weight:
+            print("gen images:", gen_images.shape)
+            print("target_images:", target_images.shape)
             gen_l1_loss = vp.losses.l1_loss(gen_images, target_images)
             gen_losses["gen_l1_loss"] = (gen_l1_loss, hparams.l1_weight)
         if hparams.l2_weight:
