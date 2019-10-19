@@ -1,6 +1,7 @@
 import itertools
 
 import numpy as np
+import cv2
 import tensorflow as tf
 from tensorflow.python.util import nest
 
@@ -198,10 +199,53 @@ def action_encoder_fn(inputs, hparams=None, norm=None):
                'action_mu': action_mu}
     return outputs
 
+
+def compute_flows(image_pairs):
+    flows = np.zeros([image_pairs.shape[0], image_pairs.shape[1], image_pairs.shape[2], image_pairs.shape[3], 2])
+    for i in range(flows.shape[0]):
+        for j in range(flows.shape[1]):
+            im1 = cv2.cvtColor(image_pairs[i, j, :, :, :3], cv2.COLOR_BGR2GRAY)
+            im2 = cv2.cvtColor(image_pairs[i, j, :, :, 3:], cv2.COLOR_BGR2GRAY)
+            out = cv2.calcOpticalFlowFarneback(im1, im2, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+            flows[i, j, :, :, :] = out
+
+#            hsv = np.zeros_like(image_pairs[i, j, :, :, 3:])
+#            hsv[...,1] = 255
+#            mag, ang = cv2.cartToPolar(out[...,0], out[...,1])
+#            hsv[...,0] = ang*180/np.pi/2
+#            hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
+#            rgb = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
+#            cv2.imwrite("flow_images/{}_{}_flow.png".format(i, j), rgb)
+#            vis_image = cv2.cvtColor(image_pairs[i, j, :, :, 3:] * 255, cv2.COLOR_BGR2RGB)
+#            cv2.imwrite("flow_images/{}_{}_raw.png".format(i, j), vis_image)
+#            diff = cv2.cvtColor(np.abs(image_pairs[i, j, :, :, :3] - image_pairs[i, j, :, :, 3:])*255, cv2.COLOR_BGR2RGB)
+#            cv2.imwrite("flow_images/{}_{}_diff.png".format(i, j), diff)
+#            diff_gray = np.abs(im1 - im2) * 255
+#            cv2.imwrite("flow_images/{}_{}_diff_gray.png".format(i, j), diff_gray)
+
+
+    flows = flows.astype(np.float32)
+    return flows
+
 def inverse_model_fn(inputs, hparams=None):
     images = inputs['images']
+    print("images:", images)
     image_pairs = tf.concat([images[:hparams.sequence_length - 1],
                              images[1:hparams.sequence_length]], axis=-1)
+    print("image_pairs:", image_pairs.shape)
+    print("image_pairs:", image_pairs)
+    if hparams.use_flows_for_inverse:
+        flows = tf.py_func(compute_flows, [image_pairs], tf.float32)
+        flows_2 = flows + 0.0
+        print("flows:", flows)
+        print("flows_2:", flows_2)
+        flows.set_shape([image_pairs.shape[0], image_pairs.shape[1], image_pairs.shape[2], image_pairs.shape[3], 2])
+        print("flows.shape", flows.shape)
+        if hparams.remove_image_from_inverse:
+            image_pairs = flows
+        else:
+            image_pairs = tf.concat([image_pairs, flows], axis=-1)
+        print("image_pairs:", image_pairs)
     if 'dx' in inputs and hparams.add_dx_to_inverse:
         image_pairs = tile_concat([image_pairs,
                                    tf.expand_dims(tf.expand_dims(inputs['dx'], axis=-2), axis=-2)], axis=-1)
@@ -1113,6 +1157,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             add_da_to_inverse=True,
             extra_depth=0,
             num_supervised=9,
+            use_flows_for_inverse=False,
+            remove_image_from_inverse=False
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
