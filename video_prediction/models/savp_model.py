@@ -1078,11 +1078,11 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             use_domain_adaptation=False,
             ndx=0,#16,
             deterministic_dx=False,
-            dx_kl_weight=0.001,
+            dx_kl_weight=0.0,
             val_visual_domain=0,    # 0 for robot, 1 for human
             nda=0,#8,
             deterministic_da=False,
-            da_kl_weight=0.001,
+            da_kl_weight=0.0,
             val_action_domain=1,    # 0 for robot, 1 for human
             learn_z_seq_prior=False,
             kl_on_inverse=False,
