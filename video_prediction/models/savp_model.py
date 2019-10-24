@@ -232,6 +232,10 @@ def compute_flows(image_pairs):
 def inverse_model_fn(inputs, hparams=None):
     images = inputs['images']
     print("images:", images)
+    print("images.shape:", images.shape)
+    print("sequence length:", hparams.sequence_length)
+    print("first images.shape", images[:hparams.sequence_length - 1].shape)
+    print("second images.shape:", images[1:hparams.sequence_length].shape)
     image_pairs = tf.concat([images[:hparams.sequence_length - 1],
                              images[1:hparams.sequence_length]], axis=-1)
     print("image_pairs:", image_pairs.shape)
@@ -941,37 +945,38 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                     dx = concat_dx_mu + tf.exp(concat_dx_log_sigma_sq / 2.0) * eps
                     inputs['dx'] = dx
 
-        if mode != 'test':
-            with tf.variable_scope('inverse_model'):
-                inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
+        with tf.variable_scope('inverse_model'):
+            inverse_action_probs = inverse_model_fn(inputs, hparams=hparams)
 
-            if not hparams.deterministic_inverse:
-                eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
-                additional_encoded_actions = {}
-                additional_encoded_actions['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
-                    tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'] / 2.0) * eps
-                additional_encoded_actions['original_encoded_actions'] = inputs['encoded_actions'] - 0
+        if not hparams.deterministic_inverse:
+            eps = tf.random_normal([hparams.sequence_length - 1, batch_size, hparams.encoded_action_size], 0, 1)
+            additional_encoded_actions = {}
+            additional_encoded_actions['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
+                tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'] / 2.0) * eps
+            additional_encoded_actions['original_encoded_actions'] = inputs['encoded_actions'] - 0
 
+            if mode != 'test':
     #            inputs['encoded_actions'] = tf.where(use_actions, x=inputs['encoded_actions'], y=inputs['encoded_actions_inverse'])
                 inputs['encoded_actions'] = tf.concat([inputs['encoded_actions'], additional_encoded_actions['encoded_actions_inverse'][:, hparams.num_supervised:, :]], axis=1)
                 # print("Encoded actions.shape", inputs['encoded_actions'].shape)
-            else:
-                assert not hparams.use_encoded_actions
-                inputs['actions_inverse'] = inverse_action_probs['action_inverse_mu']
+        else:
+            assert not hparams.use_encoded_actions
+            inputs['actions_inverse'] = inverse_action_probs['action_inverse_mu']
 
-                use_actions = tf.reshape(inputs['use_action'], [-1, 1])
-                use_actions = tf.tile(use_actions, [1, inputs['actions'].shape[-1]])
-                use_actions = tf.reshape(use_actions, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
+            use_actions = tf.reshape(inputs['use_action'], [-1, 1])
+            use_actions = tf.tile(use_actions, [1, inputs['actions'].shape[-1]])
+            use_actions = tf.reshape(use_actions, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
+            if mode != 'test':
                 inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=inputs['actions_inverse'])
 
-    if mode != 'test':
-        if hparams.decode_actions and hparams.use_encoded_actions:
-            decoded_actions = {}
-            decoded_actions['decoded_actions'] = action_decoder_fn(inputs['encoded_actions'], inputs['actions'].shape, hparams=hparams)
-    #        decoded_actions['decoded_actions'] = action_probs['action_mu']
-            if hparams.decode_from_inverse:
-                # print("Decoding from inverse:")
-                decoded_actions['decoded_actions_inverse'] = action_decoder_fn(additional_encoded_actions['encoded_actions_inverse'], inputs['actions'].shape, hparams=hparams)
+#    if mode != 'test':
+    if hparams.decode_actions and hparams.use_encoded_actions:
+        decoded_actions = {}
+        decoded_actions['decoded_actions'] = action_decoder_fn(inputs['encoded_actions'], inputs['actions'].shape, hparams=hparams)
+#        decoded_actions['decoded_actions'] = action_probs['action_mu']
+        if hparams.decode_from_inverse:
+            # print("Decoding from inverse:")
+            decoded_actions['decoded_actions_inverse'] = action_decoder_fn(additional_encoded_actions['encoded_actions_inverse'], inputs['actions'].shape, hparams=hparams)
 
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
               for name, input in inputs.items()}
@@ -1036,19 +1041,19 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
     outputs = {name: output[hparams.context_frames - 1:] for name, output in outputs.items()}
     gen_images = outputs['gen_images']
     outputs['ground_truth_sampling_mean'] = tf.reduce_mean(tf.to_float(cell.ground_truth[hparams.context_frames:]))
+    if hparams.use_encoded_actions:
+        for k in action_probs:
+            outputs[k] = action_probs[k]
+        if hparams.decode_actions:
+            for k in decoded_actions:
+                outputs[k] = decoded_actions[k]
+            
+    if hparams.train_with_partial_actions:
+        for k in inverse_action_probs:
+            outputs[k] = inverse_action_probs[k]
+        for k in additional_encoded_actions:
+            outputs[k] = additional_encoded_actions[k]
     if mode != 'test':
-        if hparams.use_encoded_actions:
-            for k in action_probs:
-                outputs[k] = action_probs[k]
-            if hparams.decode_actions:
-                for k in decoded_actions:
-                    outputs[k] = decoded_actions[k]
-                
-        if hparams.train_with_partial_actions:
-            for k in inverse_action_probs:
-                outputs[k] = inverse_action_probs[k]
-            for k in additional_encoded_actions:
-                outputs[k] = additional_encoded_actions[k]
 
             if hparams.learn_z_seq_prior:
                 outputs['r_prior_z_mu'] = r_prior_z_mu
