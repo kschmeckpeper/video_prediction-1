@@ -143,6 +143,8 @@ def create_encoder(inputs, e_net='legacy', use_e_rnn=False, rnn='lstm', **kwargs
 
 def action_decoder_fn(encoded_actions, actions_shape, hparams=None, norm=None):
     with tf.variable_scope('action_decoder', reuse=tf.AUTO_REUSE):
+        if hparams.stop_action_decoder_gradient:
+            encoded_actions = tf.stop_gradient(encoded_actions)
         reshaped_encoded_actions = tf.reshape(encoded_actions, [-1, encoded_actions.shape[-1]])
         # print("reshaped encoded actions:", reshaped_encoded_actions.shape)
         if hparams.action_encoder_norm_layer is not None:
@@ -1157,7 +1159,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             extra_depth=0,
             num_supervised=9,
             use_flows_for_inverse=False,
-            remove_image_from_inverse=False
+            remove_image_from_inverse=False,
+            stop_action_decoder_gradient=False
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
