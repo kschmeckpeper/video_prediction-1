@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--no_gif", action='store_true', default=False, help="don't store gif images")
     parser.add_argument("--no_im", action='store_true', default=False, help="don't store png images")
+    parser.add_argument("--no_actions", action='store_true', default=False, help="don't store action images")
 
     args = parser.parse_args()
 
@@ -117,6 +118,8 @@ def main():
     VideoPredictionModel = models.get_model_class(args.model)
     model = VideoPredictionModel(mode='test', hparams_dict=override_hparams_dict(dataset), hparams=args.model_hparams)
 
+    print("hparams", model.hparams)
+
     if args.num_samples:
         if args.num_samples > dataset.num_examples_per_epoch():
             print('num_samples cannot be larger than the dataset')
@@ -129,11 +132,11 @@ def main():
         raise ValueError('batch_size should evenly divide the dataset')
 
     inputs, targets = dataset.make_batch(args.batch_size)
-    if not isinstance(model, models.GroundTruthVideoPredictionModel):
+#    if not isinstance(model, models.GroundTruthVideoPredictionModel):
         # remove ground truth data past context_frames to prevent accidentally using it
-        for k, v in inputs.items():
-            if k != 'actions':
-                inputs[k] = v[:, :model.hparams.context_frames]
+#        for k, v in inputs.items():
+#            if k != 'actions':
+#                inputs[k] = v[:, :model.hparams.context_frames]
 
     input_phs = {k: tf.placeholder(v.dtype, v.shape, '%s_ph' % k) for k, v in inputs.items()}
 
@@ -155,7 +158,7 @@ def main():
     sess = tf.Session(config=config)
 
     model.restore(sess, args.checkpoint)
-
+    print("outputs:", model.outputs.keys())
     sample_ind = 0
     mses = {}
     while True:
@@ -170,11 +173,21 @@ def main():
 
         feed_dict = {input_ph: input_results[name] for name, input_ph in input_phs.items()}
         for stochastic_sample_ind in range(args.num_stochastic_samples):
-            gen_images, metrics = sess.run([model.outputs['gen_images'], model.metrics], feed_dict=feed_dict)
+            goals = [model.outputs['gen_images'],
+                     model.outputs['decoded_actions'],
+                     model.outputs['decoded_actions_inverse'],
+                     model.metrics,
+                     model.inputs]
+            gen_images, auto_enc_actions, inv_actions, metrics, sess_inputs = sess.run(goals, feed_dict=feed_dict)
             
-
+            print("actions", inputs['actions'].shape)
+            print("auto_enc_actions", auto_enc_actions.shape)
+            print("inv_actions", inv_actions.shape)
             for i, gen_images_ in enumerate(gen_images):
                 gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
+#                print("actions:", inputs['actions'][i])
+#                print("enc/dec action", auto_enc_actions[i])
+#                print("inv actions", inv_actions[i])
                 print("Mse:", str(metrics['mse']))
                 if not args.no_gif:
                     gen_images_fname = 'gen_image_%05d_%02d.gif' % (sample_ind + i, stochastic_sample_ind)
@@ -187,6 +200,54 @@ def main():
                         gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
                         gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
                         cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
+
+                if not args.no_actions:
+                    gt_ims = sess_inputs['images'][i]
+                    print("gt_ims:", gt_ims)
+                    action_fname = "action_image_%05d_%02d.png" % (sample_ind + i, stochastic_sample_ind)
+                    im_width = gt_ims.shape[2]
+                    action_image = np.ones((gt_ims.shape[1] * 3, im_width * (gt_ims.shape[0]), gt_ims.shape[3]))
+                    print("images:", inputs['images'][i].shape)
+                    print(action_image.shape)
+                    for t in range(gt_ims.shape[0]):
+                        action_image[:gt_ims.shape[1], t*im_width:(t+1)*im_width] = cv2.cvtColor(gt_ims[t], cv2.COLOR_RGB2BGR)
+
+                    gt_actions = sess_inputs['actions'][i]
+                    if model.hparams.rescale_actions:
+                        gt_actions = gt_actions / np.array([0.07, 0.07, 0.5, 0.15])
+                    for t in range(gt_actions.shape[0]):
+                        arrow_image = np.ones((gt_ims.shape[1], gt_ims.shape[2], gt_ims.shape[3]))
+                        center = (gt_ims.shape[2]//2, gt_ims.shape[1]//2)
+                        scale = min(center[0], center[1])
+                        head_size = 2
+                        gt_end = (center[0] + int(gt_actions[t][1]*scale), center[1] + int(gt_actions[t][0]*scale))
+                        print("gt_end", gt_end)
+                        auto_enc_end = (center[0] + int(auto_enc_actions[i][t][1]*scale), center[1] + int(auto_enc_actions[i][t][0]*scale))
+                        print("autoenc end:", auto_enc_end)
+                        inv_end = (center[0] + int(inv_actions[i][t][1]*scale), center[1] + int(inv_actions[i][t][0]*scale))
+                        print("inv_end", inv_end)
+                        cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
+                        cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
+                        cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
+
+                        action_image[gt_ims.shape[1]:2*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
+                    for t in range(gt_actions.shape[0]):
+                        arrow_image = np.ones((gt_ims.shape[1], gt_ims.shape[2], gt_ims.shape[3]))
+                        center = (gt_ims.shape[2]//2, gt_ims.shape[1]//2)
+                        scale = min(center[0], center[1])
+                        head_size = 2
+                        gt_end = (center[0] + int(gt_actions[t][2]*scale), center[1] + int(gt_actions[t][3]*scale))
+                        print("gt_end", gt_end)
+                        auto_enc_end = (center[0] + int(auto_enc_actions[i][t][2]*scale), center[1] + int(auto_enc_actions[i][t][3]*scale))
+                        print("autoenc end:", auto_enc_end)
+                        inv_end = (center[0] + int(inv_actions[i][t][2]*scale), center[1] + int(inv_actions[i][t][3]*scale))
+                        print("inv_end", inv_end)
+                        cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
+                        cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
+                        cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
+
+                        action_image[2*gt_ims.shape[1]:3*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
+                    cv2.imwrite(os.path.join(args.output_png_dir, action_fname), action_image * 255)
 
         sample_ind += args.batch_size
     print("mses:", mses)
