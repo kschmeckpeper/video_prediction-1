@@ -99,6 +99,13 @@ def main():
         args.output_gif_dir = args.output_gif_dir or os.path.join(args.results_gif_dir, 'model.%s' % args.model)
         args.output_png_dir = args.output_png_dir or os.path.join(args.results_png_dir, 'model.%s' % args.model)
 
+    dataset_name = os.path.split(args.input_dir)
+    while dataset_name[1] in ['train', 'test', 'val', '']:
+        dataset_name = os.path.split(dataset_name[0])
+    args.output_gif_dir = os.path.join(args.output_gif_dir, dataset_name[1])
+    args.output_png_dir = os.path.join(args.output_png_dir, dataset_name[1])
+    print("dataset:", dataset_name[1])
+
     print('----------------------------------- Options ------------------------------------')
     for k, v in args._get_kwargs():
         print(k, "=", v)
