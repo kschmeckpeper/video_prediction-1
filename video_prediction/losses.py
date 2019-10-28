@@ -54,9 +54,16 @@ def kl_loss_dist(mu_1, log_sigma_sq_1, mu_2, log_sigma_sq_2):
     return tf.reduce_mean(kl)
 
 def js_loss(mu_1, log_sigma_sq_1, mu_2, log_sigma_sq_2):
+    # This is an aproximation of the JS divergence that approximates the mixture of
+    # two gaussians as a single gaussian instead of a multi-modal distribution
     mean_mu = (mu_1 + mu_2) / 2
     mean_log_sigma_sq = tf.log((tf.exp(log_sigma_sq_1) + tf.exp(log_sigma_sq_2)) / 2)
 
     return kl_loss_dist(mu_1, log_sigma_sq_1, mean_mu, mean_log_sigma_sq) + \
            kl_loss_dist(mu_2, log_sigma_sq_2, mean_mu, mean_log_sigma_sq)
     
+def jeffreys_divergence(mu_1, log_sigma_sq_1, mu_2, log_sigma_sq_2):
+    return kl_loss_dist(mu_1, log_sigma_sq_1, mu_2, log_sigma_sq_2) + \
+           kl_loss_dist(mu_2, log_sigma_sq_2, mu_1, log_sigma_sq_1)
+
+

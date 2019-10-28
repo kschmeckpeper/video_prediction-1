@@ -11,7 +11,7 @@ from video_prediction.models import pix2pix_model, mocogan_model, spectral_norm_
 from video_prediction.ops import lrelu, dense, pad2d, conv2d, conv_pool2d, flatten, tile_concat, pool2d
 from video_prediction.rnn_ops import BasicConv2DLSTMCell, Conv2DGRUCell
 from video_prediction.utils import tf_utils
-from video_prediction.losses import kl_loss, kl_loss_dist, js_loss, l2_loss
+from video_prediction.losses import kl_loss, kl_loss_dist, js_loss, l2_loss, jeffreys_divergence
 
 # Amount to use when lower bounding tensors
 RELU_SHIFT = 1e-12
@@ -819,8 +819,11 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
 
 def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
     
-    if hparams.rescale_actions:
+    if hparams.rescale_actions_2:
+        inputs['actions'] = inputs['actions'] / tf.constant([0.027, 0.027, 0.06, 0.13])
+    elif hparams.rescale_actions:
         inputs['actions'] = inputs['actions'] / tf.constant([0.07, 0.07, 0.5, 0.15])
+
 
     # if hparams is not None:
         # print("generator hparams:", hparams)
@@ -1165,7 +1168,9 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             num_supervised=9,
             use_flows_for_inverse=False,
             remove_image_from_inverse=False,
-            stop_action_decoder_gradient=False
+            stop_action_decoder_gradient=False,
+            rescale_actions_2=False,
+            divergence_on_z="js"
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -1208,10 +1213,11 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
                 tmp_decoded_actions = outputs['decoded_actions'][:, :self.hparams.num_supervised, :]
                 tmp_gt_actions = inputs['actions'][:, :self.hparams.num_supervised, :]
 
-                # tmp_gt_actions = tf.Print(tmp_gt_actions, [tmp_gt_actions], "Gt actions")
+                tmp_gt_actions = tf.Print(tmp_gt_actions, [tmp_gt_actions], "Gt actions")
 
                 decoded_action_loss = l2_loss(tmp_decoded_actions, tmp_gt_actions)
-                # decoded_action_loss = tf.Print(decoded_action_loss, [decoded_action_loss], "decoded action_loss")   
+#                if self.hparams.mode == 'test':
+                decoded_action_loss = tf.Print(decoded_action_loss, [decoded_action_loss], "decoded action_loss")   
                 gen_losses['action_decoder_mse'] = (decoded_action_loss, self.hparams.action_decoder_mse_weight)
 
 
@@ -1266,12 +1272,18 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 #            tmp_inverse_mu = tf.reshape(tmp_inverse_mu, [outputs['action_inverse_mu'].shape[0], -1, outputs['action_inverse_mu'].shape[-1]])
 #            tmp_inverse_log_sigma_sq = tf.gather(tf.reshape(outputs['action_inverse_log_sigma_sq'], [-1]), idx)
 #            tmp_inverse_log_sigma_sq = tf.reshape(tmp_inverse_log_sigma_sq, [outputs['action_inverse_log_sigma_sq'].shape[0], -1, outputs['action_inverse_log_sigma_sq'].shape[-1]])
-
-            action_js_loss = js_loss(tmp_mu, tmp_log_sigma_sq, tmp_inverse_mu, tmp_inverse_log_sigma_sq)
-#            action_js_loss = js_loss(outputs['action_mu'], outputs['action_log_sigma_sq'],
-#                                     outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
-
+            if self.hparams.divergence_on_z == 'js':
+                action_js_loss = js_loss(tmp_mu, tmp_log_sigma_sq, tmp_inverse_mu, tmp_inverse_log_sigma_sq)
+            elif self.hparams.divergence_on_z == 'jeffreys':
+                action_js_loss = jeffreys_divergence(tmp_mu, tmp_log_sigma_sq, tmp_inverse_mu, tmp_inverse_log_sigma_sq)
+            elif self.hparams.divergence_on_z == 'kl':
+                action_js_loss = kl_loss_dist(tmp_inverse_mu, tmp_inverse_log_sigma_sq, tmp_mu, tmp_log_sigma_sq)
+            elif self.hparams.divergence_on_z == 'kl_reversed':
+                action_js_loss = kl_loss_dist(tmp_mu, tmp_log_sigma_sq, tmp_inverse_mu, tmp_inverse_log_sigma_sq)
+            else:
+                raise ValueError("Invalid divergence_on_z: {}".format(self.hparams.divergence_on_z))
             gen_losses['action_js_loss'] = (action_js_loss, self.hparams.action_js_loss)
+
 
             if self.hparams.decode_actions and self.hparams.decode_from_inverse:
                 tmp_decoded_inverse = outputs['decoded_actions_inverse'][:, :self.hparams.num_supervised, :]
