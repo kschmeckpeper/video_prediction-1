@@ -181,15 +181,19 @@ def main():
         feed_dict = {input_ph: input_results[name] for name, input_ph in input_phs.items()}
         for stochastic_sample_ind in range(args.num_stochastic_samples):
             goals = [model.outputs['gen_images'],
-                     model.outputs['decoded_actions'],
-                     model.outputs['decoded_actions_inverse'],
                      model.metrics,
                      model.inputs]
-            gen_images, auto_enc_actions, inv_actions, metrics, sess_inputs = sess.run(goals, feed_dict=feed_dict)
+
+            if 'decoded_actions' in model.outputs:
+                goals.append(model.outputs['decoded_actions'])
+                goals.append(model.outputs['decoded_actions_inverse'])
+                visualize_actions = True
+                gen_images, metrics, sess_inputs, auto_enc_actions, inv_actions = sess.run(goals, feed_dict=feed_dict)
+            else:
+                print("\n\n\n\nCannot visualize actions because the chosen model has no decoder\n\n\n\n")
+                visualize_actions = False
+                gen_images, metrics, sess_inputs = sess.run(goals, feed_dict=feed_dict)
             
-            print("actions", inputs['actions'].shape)
-            print("auto_enc_actions", auto_enc_actions.shape)
-            print("inv_actions", inv_actions.shape)
             for i, gen_images_ in enumerate(gen_images):
                 gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
 #                print("actions:", inputs['actions'][i])
@@ -208,14 +212,11 @@ def main():
                         gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
                         cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
 
-                if not args.no_actions:
+                if not args.no_actions and visualize_actions:
                     gt_ims = sess_inputs['images'][i]
-                    print("gt_ims:", gt_ims)
                     action_fname = "action_image_%05d_%02d.png" % (sample_ind + i, stochastic_sample_ind)
                     im_width = gt_ims.shape[2]
                     action_image = np.ones((gt_ims.shape[1] * 3, im_width * (gt_ims.shape[0]), gt_ims.shape[3]))
-                    print("images:", inputs['images'][i].shape)
-                    print(action_image.shape)
                     for t in range(gt_ims.shape[0]):
                         action_image[:gt_ims.shape[1], t*im_width:(t+1)*im_width] = cv2.cvtColor(gt_ims[t], cv2.COLOR_RGB2BGR)
 
@@ -228,11 +229,11 @@ def main():
                         scale = min(center[0], center[1])
                         head_size = 2
                         gt_end = (center[0] + int(gt_actions[t][1]*scale), center[1] + int(gt_actions[t][0]*scale))
-                        print("gt_end", gt_end)
+#                        print("gt_end", gt_end)
                         auto_enc_end = (center[0] + int(auto_enc_actions[i][t][1]*scale), center[1] + int(auto_enc_actions[i][t][0]*scale))
-                        print("autoenc end:", auto_enc_end)
+#                        print("autoenc end:", auto_enc_end)
                         inv_end = (center[0] + int(inv_actions[i][t][1]*scale), center[1] + int(inv_actions[i][t][0]*scale))
-                        print("inv_end", inv_end)
+#                        print("inv_end", inv_end)
                         cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
                         cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
                         cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
@@ -243,12 +244,12 @@ def main():
                         center = (gt_ims.shape[2]//2, gt_ims.shape[1]//2)
                         scale = min(center[0], center[1])
                         head_size = 2
-                        gt_end = (center[0] + int(gt_actions[t][2]*scale), center[1] + int(gt_actions[t][3]*scale))
-                        print("gt_end", gt_end)
-                        auto_enc_end = (center[0] + int(auto_enc_actions[i][t][2]*scale), center[1] + int(auto_enc_actions[i][t][3]*scale))
-                        print("autoenc end:", auto_enc_end)
-                        inv_end = (center[0] + int(inv_actions[i][t][2]*scale), center[1] + int(inv_actions[i][t][3]*scale))
-                        print("inv_end", inv_end)
+                        gt_end = (center[0] + int(gt_actions[t][3]*scale), center[1] + int(gt_actions[t][2]*scale))
+#                        print("gt_end", gt_end)
+                        auto_enc_end = (center[0] + int(auto_enc_actions[i][t][3]*scale), center[1] + int(auto_enc_actions[i][t][2]*scale))
+#                        print("autoenc end:", auto_enc_end)
+                        inv_end = (center[0] + int(inv_actions[i][t][3]*scale), center[1] + int(inv_actions[i][t][2]*scale))
+#                        print("inv_end", inv_end)
                         cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
                         cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
                         cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
