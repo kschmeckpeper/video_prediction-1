@@ -405,6 +405,7 @@ def main():
                         plt.clf()
 
                         print("NUm actions:", len(all_actions[i]))
+                        print("Action", i, "avg", np.sum(np.abs(acts)) / len(acts))
                         
                     exit()
             # print("average t_iter {} \n".format(np.mean(elapsed_times[-20:])))
