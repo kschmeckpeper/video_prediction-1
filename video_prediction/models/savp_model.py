@@ -11,7 +11,7 @@ from video_prediction.models import pix2pix_model, mocogan_model, spectral_norm_
 from video_prediction.ops import lrelu, dense, pad2d, conv2d, conv_pool2d, flatten, tile_concat, pool2d
 from video_prediction.rnn_ops import BasicConv2DLSTMCell, Conv2DGRUCell
 from video_prediction.utils import tf_utils
-from video_prediction.losses import kl_loss, kl_loss_dist, js_loss, l2_loss, jeffreys_divergence
+from video_prediction.losses import kl_loss, kl_loss_dist, js_loss, l2_loss, jeffreys_divergence, negative_log_likelihood
 
 # Amount to use when lower bounding tensors
 RELU_SHIFT = 1e-12
@@ -165,7 +165,14 @@ def action_decoder_fn(encoded_actions, actions_shape, hparams=None, norm=None):
             action_reconstruction = dense(out, actions_shape[-1], kernel_init=None, bias_init=None)
             action_reconstruction = tf.reshape(action_reconstruction, [actions_shape[0], actions_shape[1], actions_shape[2]])
 
-    return action_reconstruction
+            if hparams.action_decoder_variance == 'none':
+                log_sigma = None
+            elif hparams.action_decoder_variance == 'single':
+                log_sigma = tf.Variable(0.0, name="action_decoder_log_sigma")
+            elif hparams.action_decoder_variance == 'full':
+                log_sigma = dense(out, actions_shape[-1], kernel_init=None, bias_init=None)
+                log_sigma = tf.reshape(log_sigma, [actions_shape[0], actions_shape[1], actions_shape[2]])
+    return action_reconstruction, log_sigma
 
 def action_encoder_fn(inputs, hparams=None, norm=None):
 #    inputs['actions'] = tf.Print(inputs['actions'], [inputs['actions'][:, :hparams.num_supervised, :]], "First nine", summarize=-1)
@@ -975,11 +982,11 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
 #    if mode != 'test':
     if hparams.decode_actions and hparams.use_encoded_actions:
         decoded_actions = {}
-        decoded_actions['decoded_actions'] = action_decoder_fn(inputs['encoded_actions'], inputs['actions'].shape, hparams=hparams)
+        decoded_actions['decoded_actions'], decoded_actions['decoded_actions_log_sigma'] = action_decoder_fn(inputs['encoded_actions'], inputs['actions'].shape, hparams=hparams)
 #        decoded_actions['decoded_actions'] = action_probs['action_mu']
         if hparams.decode_from_inverse:
             # print("Decoding from inverse:")
-            decoded_actions['decoded_actions_inverse'] = action_decoder_fn(additional_encoded_actions['encoded_actions_inverse'], inputs['actions'].shape, hparams=hparams)
+            decoded_actions['decoded_actions_inverse'], decoded_actions['decoded_actions_inverse_log_sigma'] = action_decoder_fn(additional_encoded_actions['encoded_actions_inverse'], inputs['actions'].shape, hparams=hparams)
 
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
               for name, input in inputs.items()}
@@ -1046,16 +1053,20 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
     outputs['ground_truth_sampling_mean'] = tf.reduce_mean(tf.to_float(cell.ground_truth[hparams.context_frames:]))
     if hparams.use_encoded_actions:
         for k in action_probs:
-            outputs[k] = action_probs[k]
+            if action_probs[k] is not None:
+                outputs[k] = action_probs[k]
         if hparams.decode_actions:
             for k in decoded_actions:
-                outputs[k] = decoded_actions[k]
+                if decoded_actions[k] is not None:
+                    outputs[k] = decoded_actions[k]
             
     if hparams.train_with_partial_actions:
         for k in inverse_action_probs:
-            outputs[k] = inverse_action_probs[k]
+            if inverse_action_probs[k] is not None:
+                outputs[k] = inverse_action_probs[k]
         for k in additional_encoded_actions:
-            outputs[k] = additional_encoded_actions[k]
+            if additional_encoded_actions[k] is not None:
+                outputs[k] = additional_encoded_actions[k]
     if mode != 'test':
 
             if hparams.learn_z_seq_prior:
@@ -1170,7 +1181,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             remove_image_from_inverse=False,
             stop_action_decoder_gradient=False,
             rescale_actions_2=False,
-            divergence_on_z="js"
+            divergence_on_z="js",
+            action_decoder_variance="none"
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -1213,12 +1225,18 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
                 tmp_decoded_actions = outputs['decoded_actions'][:, :self.hparams.num_supervised, :]
                 tmp_gt_actions = inputs['actions'][:, :self.hparams.num_supervised, :]
 
-                tmp_gt_actions = tf.Print(tmp_gt_actions, [tmp_gt_actions], "Gt actions")
+#                tmp_gt_actions = tf.Print(tmp_gt_actions, [tmp_gt_actions], "Gt actions")
 
-                decoded_action_loss = l2_loss(tmp_decoded_actions, tmp_gt_actions)
-#                if self.hparams.mode == 'test':
-                decoded_action_loss = tf.Print(decoded_action_loss, [decoded_action_loss], "decoded action_loss")   
-                gen_losses['action_decoder_mse'] = (decoded_action_loss, self.hparams.action_decoder_mse_weight)
+                if self.hparams.action_decoder_variance == 'none':
+                    decoded_action_loss = l2_loss(tmp_decoded_actions, tmp_gt_actions)
+                    gen_losses['action_decoder_mse'] = (decoded_action_loss, self.hparams.action_decoder_mse_weight)
+                else:
+                    if self.hparams.action_decoder_variance == 'single':
+                        tmp_decoded_action_log_sigmas = outputs['decoded_actions_log_sigma']
+                    elif self.hparams.action_decoder_variance == 'full':
+                        tmp_decoded_action_log_sigmas = outputs['decoded_actions_log_sigma'][:, :self.hparams.num_supervised, :]
+                    decoded_action_loss = negative_log_likelihood(tmp_decoded_actions, tmp_gt_actions, tmp_decoded_action_log_sigmas)
+                    gen_losses['action_decoder_nll'] = (decoded_action_loss, self.hparams.action_decoder_mse_weight)
 
 
 
@@ -1288,8 +1306,17 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             if self.hparams.decode_actions and self.hparams.decode_from_inverse:
                 tmp_decoded_inverse = outputs['decoded_actions_inverse'][:, :self.hparams.num_supervised, :]
                 tmp_gt_actions = inputs['actions'][:, :self.hparams.num_supervised, :]
-                decoded_inverse_action_loss = l2_loss(tmp_decoded_inverse, tmp_gt_actions)
-                gen_losses['action_decoder_inverse_mse'] = (decoded_inverse_action_loss, self.hparams.action_decoder_mse_weight)
+
+                if self.hparams.action_decoder_variance == 'none':
+                    decoded_inverse_action_loss = l2_loss(tmp_decoded_inverse, tmp_gt_actions)
+                    gen_losses['action_decoder_inverse_mse'] = (decoded_inverse_action_loss, self.hparams.action_decoder_mse_weight)
+                else:
+                    if self.hparams.action_decoder_variance == 'single':
+                        tmp_decoded_inverse_log_sigmas = outputs['decoded_actions_inverse_log_sigma']
+                    elif self.hparams.action_decoder_variance == 'full':
+                        tmp_decoded_inverse_log_sigmas = outputs['decoded_actions_inverse_log_sigma'][:, :self.hparams.num_supervised, :]
+                    decoded_inverse_action_loss = negative_log_likelihood(tmp_decoded_inverse, tmp_gt_actions, tmp_decoded_inverse_log_sigmas)
+                    gen_losses['action_decoder_inverse_nll'] = (decoded_inverse_action_loss, self.hparams.action_decoder_mse_weight)
 
             if self.hparams.kl_on_inverse:
                 action_inverse_kl_loss = kl_loss(tmp_inverse_mu, tmp_inverse_log_sigma_sq)

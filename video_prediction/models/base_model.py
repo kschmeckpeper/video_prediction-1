@@ -518,7 +518,10 @@ class VideoPredictionModel(BaseVideoPredictionModel):
                 for k in inputs.keys():
                     print("input:", k, inputs[k].shape)
                 for k in outputs.keys():
-                    print("outputs:", k, outputs[k].shape)
+                    if outputs[k] is not None:
+                        print("outputs:", k, outputs[k].shape)
+                    else:
+                        print("outputs:", k, outputs[k])
                 print("targets:", targets.shape)
                 metrics = self.metrics_fn(inputs, outputs, targets)
             with tf.name_scope("eval_outputs_and_metrics"):

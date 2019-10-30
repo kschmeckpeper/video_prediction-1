@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from video_prediction.ops import sigmoid_kl_with_logits
 
@@ -66,4 +67,10 @@ def jeffreys_divergence(mu_1, log_sigma_sq_1, mu_2, log_sigma_sq_2):
     return kl_loss_dist(mu_1, log_sigma_sq_1, mu_2, log_sigma_sq_2) + \
            kl_loss_dist(mu_2, log_sigma_sq_2, mu_1, log_sigma_sq_1)
 
+def negative_log_likelihood(pred_mu, gt_mu, pred_log_sigma):
+    sigma = tf.exp(pred_log_sigma)
+    nll = 0.5 * tf.pow((gt_mu - pred_mu) / sigma, 2) + pred_log_sigma + 0.5 * np.log(2 * np.pi)
+    nll = tf.reduce_mean(nll)
+    print("nll:", nll)
+    return nll
 
