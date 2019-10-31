@@ -1067,25 +1067,25 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
         for k in additional_encoded_actions:
             if additional_encoded_actions[k] is not None:
                 outputs[k] = additional_encoded_actions[k]
-    if mode != 'test':
+#    if mode != 'test':
+    if hparams.train_with_partial_actions:
+        if hparams.learn_z_seq_prior:
+            outputs['r_prior_z_mu'] = r_prior_z_mu
+            outputs['r_prior_z_log_sigma_sq'] = r_prior_z_log_sigma_sq
+            outputs['h_prior_z_mu'] = h_prior_z_mu
+            outputs['h_prior_z_log_sigma_sq'] = h_prior_z_log_sigma_sq
 
-            if hparams.learn_z_seq_prior:
-                outputs['r_prior_z_mu'] = r_prior_z_mu
-                outputs['r_prior_z_log_sigma_sq'] = r_prior_z_log_sigma_sq
-                outputs['h_prior_z_mu'] = h_prior_z_mu
-                outputs['h_prior_z_log_sigma_sq'] = h_prior_z_log_sigma_sq
+        elif hparams.nda and not hparams.deterministic_da:
+            outputs['da0_mu'] = da_mu[0]
+            outputs['da0_log_sigma_sq'] = da_log_sigma_sq[0]
+            outputs['da1_mu'] = da_mu[1]
+            outputs['da1_log_sigma_sq'] = da_log_sigma_sq[1]
 
-            elif hparams.nda and not hparams.deterministic_da:
-                outputs['da0_mu'] = da_mu[0]
-                outputs['da0_log_sigma_sq'] = da_log_sigma_sq[0]
-                outputs['da1_mu'] = da_mu[1]
-                outputs['da1_log_sigma_sq'] = da_log_sigma_sq[1]
-
-            if hparams.ndx and not hparams.deterministic_dx:
-                outputs['dx0_mu'] = dx_mu[0]
-                outputs['dx0_log_sigma_sq'] = dx_log_sigma_sq[0]
-                outputs['dx1_mu'] = dx_mu[1]
-                outputs['dx1_log_sigma_sq'] = dx_log_sigma_sq[1]
+        if hparams.ndx and not hparams.deterministic_dx:
+            outputs['dx0_mu'] = dx_mu[0]
+            outputs['dx0_log_sigma_sq'] = dx_log_sigma_sq[0]
+            outputs['dx1_mu'] = dx_mu[1]
+            outputs['dx1_log_sigma_sq'] = dx_log_sigma_sq[1]
 
     return gen_images, outputs
 
