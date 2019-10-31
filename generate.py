@@ -14,7 +14,8 @@ import tensorflow as tf
 
 from video_prediction import datasets, models
 from video_prediction.utils.ffmpeg_gif import save_gif
-
+import matplotlib.pyplot as plt
+import scipy.stats as stats
 
 def main():
     parser = argparse.ArgumentParser()
@@ -160,6 +161,11 @@ def main():
         with open(os.path.join(output_dir, "model_hparams.json"), "w") as f:
             f.write(json.dumps(model.hparams.values(), sort_keys=True, indent=4))
 
+    prior_plots = [plt.figure() for i in range(model.hparams.encoded_action_size)]
+    prior_robot_counts = [[] for i in range(model.hparams.encoded_action_size)]
+    prior_human_counts = [[] for i in range(model.hparams.encoded_action_size)]
+
+
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_mem_frac)
     config = tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)
     sess = tf.Session(config=config)
@@ -194,6 +200,14 @@ def main():
                 visualize_actions = False
                 gen_images, metrics, sess_inputs = sess.run(goals, feed_dict=feed_dict)
             
+            if 'r_prior_z_mu' in model.outputs:
+                goals.append(model.outputs['r_prior_z_mu'])
+                goals.append(model.outputs['r_prior_z_log_sigma_sq'])
+                goals.append(model.outputs['h_prior_z_mu'])
+                goals.append(model.outputs['h_prior_z_log_sigma_sq'])
+                gen_images, metrics, sess_inputs, auto_enc_actions, inv_actions, r_prior_mu, r_prior_log_sigma_sq, h_prior_mu, h_prior_log_sigma_sq = sess.run(goals, feed_dict=feed_dict)
+
+
             for i, gen_images_ in enumerate(gen_images):
                 gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
 #                print("actions:", inputs['actions'][i])
@@ -211,6 +225,22 @@ def main():
                         gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
                         gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
                         cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
+
+                if 'r_prior_z_mu' in model.outputs:
+                    x = np.linspace(-3, 3, 100)
+                    for j in range(r_prior_mu.shape[0]):
+                        plt.figure(prior_plots[j].number)
+                        for k in range(h_prior_mu.shape[1]):
+                            plt.plot(x, stats.norm.pdf(x, h_prior_mu[0][k][j], np.exp(h_prior_log_sigma_sq[0][k][j] / 2)), color='red')
+
+                            for s in range(1000):
+                                prior_human_counts[j].append(h_prior_mu[0][k][j] + np.exp(h_prior_log_sigma_sq[0][k][j] / 2) * np.random.normal(0))
+                                prior_robot_counts[j].append(r_prior_mu[j] + np.exp(r_prior_log_sigma_sq[j] / 2) * np.random.normal(0))
+                        plt.plot(x, stats.norm.pdf(x, r_prior_mu[j], np.exp(r_prior_log_sigma_sq[j] / 2)), color='green')
+                    print("r_prior", r_prior_mu)
+                    print("r_prior_sigma_sq", r_prior_log_sigma_sq)
+                    print("h_prior", h_prior_mu)
+                    print("h_prior", h_prior_log_sigma_sq)
 
                 if not args.no_actions and visualize_actions:
                     gt_ims = sess_inputs['images'][i]
@@ -259,6 +289,18 @@ def main():
 
         sample_ind += args.batch_size
     print("mses:", mses)
+
+    bins = np.linspace(-3, 3, 100)
+    for i in range(len(prior_plots)):
+        print("saving plot to :", os.path.join(args.output_png_dir, "prior_plot_{}.png".format(i)))
+        prior_plots[i].savefig(os.path.join(args.output_png_dir, "prior_plot_{}.png".format(i)))
+
+        fig = plt.figure()
+        print("Human counts:", len(prior_human_counts[i]))
+        plt.hist(prior_human_counts[i], bins, alpha=0.5, color="red")
+        plt.hist(prior_robot_counts[i], bins, alpha=0.5, color="green")
+        fig.savefig(os.path.join(args.output_png_dir, "prior_hist_{}.png".format(i)))
+
     with open(os.path.join(args.output_gif_dir, "mses.json"), 'w') as f:
         f.write(json.dumps(mses))
 
