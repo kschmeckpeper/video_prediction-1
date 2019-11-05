@@ -165,6 +165,12 @@ def main():
     prior_robot_counts = [[] for i in range(model.hparams.encoded_action_size)]
     prior_human_counts = [[] for i in range(model.hparams.encoded_action_size)]
 
+    true_action_counts = [[] for i in range(4)]
+    decoded_action_counts = [[] for i in range(4)]
+    inverse_action_counts = [[] for i in range(4)]
+
+    enc_action_counts = [[] for i in range(4)]
+    inverse_enc_action_counts = [[] for i in range(4)]
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_mem_frac)
     config = tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)
@@ -186,26 +192,22 @@ def main():
 
         feed_dict = {input_ph: input_results[name] for name, input_ph in input_phs.items()}
         for stochastic_sample_ind in range(args.num_stochastic_samples):
-            goals = [model.outputs['gen_images'],
-                     model.metrics,
-                     model.inputs]
-
-            if 'decoded_actions' in model.outputs:
-                goals.append(model.outputs['decoded_actions'])
-                goals.append(model.outputs['decoded_actions_inverse'])
+            goals = [model.outputs, model.metrics, model.inputs]
+            model_outputs, metrics, sess_inputs = sess.run(goals, feed_dict=feed_dict)
+            gen_images = model_outputs['gen_images']
+    
+            if 'decoded_actions' in model_outputs:
                 visualize_actions = True
-                gen_images, metrics, sess_inputs, auto_enc_actions, inv_actions = sess.run(goals, feed_dict=feed_dict)
+                auto_enc_actions = model_outputs['decoded_actions']
+                inv_actions = model_outputs['decoded_actions_inverse']
             else:
                 print("\n\n\n\nCannot visualize actions because the chosen model has no decoder\n\n\n\n")
                 visualize_actions = False
-                gen_images, metrics, sess_inputs = sess.run(goals, feed_dict=feed_dict)
-            
             if 'r_prior_z_mu' in model.outputs:
-                goals.append(model.outputs['r_prior_z_mu'])
-                goals.append(model.outputs['r_prior_z_log_sigma_sq'])
-                goals.append(model.outputs['h_prior_z_mu'])
-                goals.append(model.outputs['h_prior_z_log_sigma_sq'])
-                gen_images, metrics, sess_inputs, auto_enc_actions, inv_actions, r_prior_mu, r_prior_log_sigma_sq, h_prior_mu, h_prior_log_sigma_sq = sess.run(goals, feed_dict=feed_dict)
+                r_prior_mu = model_outputs['r_prior_z_mu']
+                r_prior_log_sigma_sq = model_outputs['r_prior_z_log_sigma_sq']
+                h_prior_mu = model_outputs['h_prior_z_log_sigma_sq']
+                h_prior_log_sigma_sq = model_outputs['h_prior_z_log_sigma_sq']
 
 
             for i, gen_images_ in enumerate(gen_images):
@@ -214,12 +216,45 @@ def main():
 #                print("enc/dec action", auto_enc_actions[i])
 #                print("inv actions", inv_actions[i])
                 print("Mse:", str(metrics['mse']))
+                print("sess_inpuuts", sess_inputs.keys())
+                print("num sup", model.hparams.num_supervised)
+                print("use:", sess_inputs['use_action'])
+                if sess_inputs['use_action'][i][0]:
+                    gt_actions = sess_inputs['actions'][i]
+                    if model.hparams.rescale_actions:
+                        gt_actions = gt_actions / np.array([0.07, 0.07, 0.5, 0.15])
+                    for t in range(gt_actions.shape[0]):
+                        for j in range(gt_actions.shape[1]):
+                            true_action_counts[j].append(gt_actions[t][j])
+                            if 'decoded_actions' in model_outputs:
+                                decoded_action_counts[j].append(auto_enc_actions[0][t][j])
+                if visualize_actions:
+                    for t in range(auto_enc_actions.shape[1]):
+                        for j in range(auto_enc_actions.shape[2]):
+                            inverse_action_counts[j].append(inv_actions[0][t][j])
+                if 'encoded_actions_inverse' in model_outputs:
+                    print("Enc actons inv:", model_outputs['encoded_actions_inverse'].shape)
+                    for t in range(model_outputs['encoded_actions_inverse'].shape[1]):
+                        for j in range(model_outputs['encoded_actions_inverse'].shape[2]):
+                            inverse_enc_action_counts[j].append(model_outputs['encoded_actions_inverse'][i][t][j])
+                if 'original_encoded_actions' in model_outputs:
+                    print("enc actions orig", model_outputs['original_encoded_actions'].shape)
+                    for t in range(model_outputs['original_encoded_actions'].shape[1]):
+                        for j in range(model_outputs['original_encoded_actions'].shape[2]):
+                            enc_action_counts[j].append(model_outputs['original_encoded_actions'][i][t][j])
+
+
                 if not args.no_gif:
                     gen_images_fname = 'gen_image_%05d_%02d.gif' % (sample_ind + i, stochastic_sample_ind)
                     mses[gen_images_fname] = str(metrics['mse'])
                     save_gif(os.path.join(args.output_gif_dir, gen_images_fname),
                             gen_images_[:args.gif_length] if args.gif_length else gen_images_, fps=args.fps)
                 if not args.no_im:
+                    for t, im_ in enumerate(sess_inputs['images'][i]):
+                        im = (im_ * 255.0).astype(np.uint8)
+                        im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
+                        cv2.imwrite(os.path.join(args.output_png_dir, "context_image_{}_{}_{}.png".format(sample_ind+i, stochastic_sample_ind, t)), im)
+
                     gen_image_fname_pattern = 'gen_image_%%05d_%%02d_%%0%dd.png' % max(2, len(str(len(gen_images_) - 1)))
                     for t, gen_image in enumerate(gen_images_):
                         gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
@@ -237,10 +272,6 @@ def main():
                                 prior_human_counts[j].append(h_prior_mu[0][k][j] + np.exp(h_prior_log_sigma_sq[0][k][j] / 2) * np.random.normal(0))
                                 prior_robot_counts[j].append(r_prior_mu[j] + np.exp(r_prior_log_sigma_sq[j] / 2) * np.random.normal(0))
                         plt.plot(x, stats.norm.pdf(x, r_prior_mu[j], np.exp(r_prior_log_sigma_sq[j] / 2)), color='green')
-                    print("r_prior", r_prior_mu)
-                    print("r_prior_sigma_sq", r_prior_log_sigma_sq)
-                    print("h_prior", h_prior_mu)
-                    print("h_prior", h_prior_log_sigma_sq)
 
                 if not args.no_actions and visualize_actions:
                     gt_ims = sess_inputs['images'][i]
@@ -258,34 +289,35 @@ def main():
                         center = (gt_ims.shape[2]//2, gt_ims.shape[1]//2)
                         scale = min(center[0], center[1])
                         head_size = 2
-                        gt_end = (center[0] + int(gt_actions[t][1]*scale), center[1] + int(gt_actions[t][0]*scale))
-#                        print("gt_end", gt_end)
-                        auto_enc_end = (center[0] + int(auto_enc_actions[i][t][1]*scale), center[1] + int(auto_enc_actions[i][t][0]*scale))
-#                        print("autoenc end:", auto_enc_end)
+                        if sess_inputs['use_action'][i][0]:
+                            gt_end = (center[0] + int(gt_actions[t][1]*scale), center[1] + int(gt_actions[t][0]*scale))
+                            auto_enc_end = (center[0] + int(auto_enc_actions[i][t][1]*scale), center[1] + int(auto_enc_actions[i][t][0]*scale))
+                            cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
+                            cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
                         inv_end = (center[0] + int(inv_actions[i][t][1]*scale), center[1] + int(inv_actions[i][t][0]*scale))
-#                        print("inv_end", inv_end)
-                        cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
-                        cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
                         cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
 
                         action_image[gt_ims.shape[1]:2*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
-                    for t in range(gt_actions.shape[0]):
-                        arrow_image = np.ones((gt_ims.shape[1], gt_ims.shape[2], gt_ims.shape[3]))
-                        center = (gt_ims.shape[2]//2, gt_ims.shape[1]//2)
-                        scale = min(center[0], center[1])
-                        head_size = 2
-                        gt_end = (center[0] + int(gt_actions[t][3]*scale), center[1] + int(gt_actions[t][2]*scale))
-#                        print("gt_end", gt_end)
-                        auto_enc_end = (center[0] + int(auto_enc_actions[i][t][3]*scale), center[1] + int(auto_enc_actions[i][t][2]*scale))
-#                        print("autoenc end:", auto_enc_end)
-                        inv_end = (center[0] + int(inv_actions[i][t][3]*scale), center[1] + int(inv_actions[i][t][2]*scale))
-#                        print("inv_end", inv_end)
-                        cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
-                        cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
-                        cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
 
-                        action_image[2*gt_ims.shape[1]:3*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
+
+                    #for t in range(gt_actions.shape[0]):
+                    #    arrow_image = np.ones((gt_ims.shape[1], gt_ims.shape[2], gt_ims.shape[3]))
+                    #    center = (gt_ims.shape[2]//2, gt_ims.shape[1]//2)
+                    #    scale = min(center[0], center[1])
+                    #    head_size = 2
+                    #    if sess_inputs['use_action'][i][0]:
+                    #        gt_end = (center[0] + int(gt_actions[t][3]*scale), center[1] + int(gt_actions[t][2]*scale))
+                    #        auto_enc_end = (center[0] + int(auto_enc_actions[i][t][3]*scale), center[1] + int(auto_enc_actions[i][t][2]*scale))
+                    #        cv2.arrowedLine(arrow_image, center, gt_end, (1, 0, 0), 2) # In BGR color space
+                    #        cv2.arrowedLine(arrow_image, center, auto_enc_end, (0, 1, 0), 1)
+
+                    #    inv_end = (center[0] + int(inv_actions[i][t][3]*scale), center[1] + int(inv_actions[i][t][2]*scale))
+                    #    cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
+                    
+
+                     #   action_image[2*gt_ims.shape[1]:3*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
                     cv2.imwrite(os.path.join(args.output_png_dir, action_fname), action_image * 255)
+
 
         sample_ind += args.batch_size
     print("mses:", mses)
@@ -300,6 +332,22 @@ def main():
         plt.hist(prior_human_counts[i], bins, alpha=0.5, color="red")
         plt.hist(prior_robot_counts[i], bins, alpha=0.5, color="green")
         fig.savefig(os.path.join(args.output_png_dir, "prior_hist_{}.png".format(i)))
+
+    bins = np.linspace(-1, 1, 20)
+
+    for i in range(len(enc_action_counts)):
+        fig = plt.figure()
+        print("enc cations", len(enc_action_counts[i]))
+        plt.hist(inverse_enc_action_counts[i], bins, alpha=0.5, color="red")
+        plt.hist(enc_action_counts[i], bins, alpha=0.5, color="green")
+        fig.savefig(os.path.join(args.output_png_dir, "enc_action_hist_{}.png".format(i)))
+
+    for i in range(len(true_action_counts)):
+        fig = plt.figure()
+        plt.hist(true_action_counts[i], bins, alpha=0.3, color="blue")
+        plt.hist(decoded_action_counts[i], bins, alpha=0.3, color="green")
+        plt.hist(inverse_action_counts[i], bins, alpha=0.3, color="red")
+        fig.savefig(os.path.join(args.output_png_dir, "action_hist_{}.png".format(i)))
 
     with open(os.path.join(args.output_gif_dir, "mses.json"), 'w') as f:
         f.write(json.dumps(mses))
