@@ -195,14 +195,29 @@ def action_encoder_fn(inputs, hparams=None, norm=None):
             if norm is not None:
                 out = norm_layer(out)
             out = tf.nn.relu(out)
+    encoded_action_size = hparams.encoded_action_size
+    if hparams.action_encoder_domain_var == 'constant':
+        encoded_action_size -= 1
     with tf.variable_scope('action_encoder_out_mu'):
-        action_mu = dense(out, hparams.encoded_action_size, kernel_init=None, bias_init=None)
-        action_mu = tf.reshape(action_mu, [inputs['actions'].shape[0], -1, hparams.encoded_action_size])
+        action_mu = dense(out, encoded_action_size, kernel_init=None, bias_init=None)
+        action_mu = tf.reshape(action_mu, [inputs['actions'].shape[0], -1, encoded_action_size])
     with tf.variable_scope('action_encoder_out_sigma_sq'):
-        action_log_sigma_sq = dense(out, hparams.encoded_action_size)
+        action_log_sigma_sq = dense(out, encoded_action_size)
 #        action_log_sigma_sq = tf.clip_by_value(action_log_sigma_sq, -10, 10)
-        action_log_sigma_sq = tf.reshape(action_log_sigma_sq, [inputs['actions'].shape[0], -1, hparams.encoded_action_size])
+        action_log_sigma_sq = tf.reshape(action_log_sigma_sq, [inputs['actions'].shape[0], -1, encoded_action_size])
 
+
+    if hparams.action_encoder_domain_var == 'constant':
+        print("action_mu_mu", action_mu)
+        action_mu = tf.concat([action_mu,
+                           tf.constant(1.0, shape=(action_mu.shape[0],
+                                                                    action_mu.shape[1],
+                                                                    1))], -1)
+        print("action_mu", action_mu)
+        action_log_sigma_sq = tf.concat([action_log_sigma_sq,
+                                     tf.constant(-1.0, shape=(action_log_sigma_sq.shape[0],
+                                                                              action_log_sigma_sq.shape[1],
+                                                                              1))], -1)
 
     outputs = {'action_log_sigma_sq': action_log_sigma_sq,
                'action_mu': action_mu}
@@ -265,14 +280,30 @@ def inverse_model_fn(inputs, hparams=None):
     if 'da' in inputs and hparams.add_da_to_inverse:
         image_pairs = tile_concat([image_pairs,
                                    tf.expand_dims(tf.expand_dims(inputs['da'], axis=-2), axis=-2)], axis=-1)
+
+    encoded_action_size = hparams.encoded_action_size
+
+    if hparams.action_encoder_domain_var == 'constant':
+        encoded_action_size -= 1
     outputs = create_encoder(image_pairs,
                              e_net=hparams.inverse_model_net,
                              use_e_rnn=hparams.use_inverse_model_rnn,
                              rnn=hparams.rnn,
-                             nz=hparams.encoded_action_size,
+                             nz=encoded_action_size,
                              nef=hparams.nef,
                              n_layers=hparams.n_layers,
                              norm_layer=hparams.norm_layer)
+    if hparams.action_encoder_domain_var == 'constant':
+        print("enc_zx_mu", outputs['enc_zs_mu'])
+        outputs['enc_zs_mu'] = tf.concat([outputs['enc_zs_mu'],
+                                      tf.constant(-1.0, shape=(outputs['enc_zs_mu'].shape[0],
+                                                                               outputs['enc_zs_mu'].shape[1],
+                                                                               1))], -1)
+        print("enc_zx_mu", outputs['enc_zs_mu'])
+        outputs['enc_zs_log_sigma_sq'] = tf.concat([outputs['enc_zs_log_sigma_sq'],
+                                                tf.constant(-1.0,  shape=(outputs['enc_zs_log_sigma_sq'].shape[0],
+                                                                                         outputs['enc_zs_log_sigma_sq'].shape[1],
+                                                                                         1))], -1)
     renamed_outputs = {'action_inverse_mu': outputs['enc_zs_mu'],
                        'action_inverse_log_sigma_sq': outputs['enc_zs_log_sigma_sq']}
     # print("Outputs for inverse model", renamed_outputs.keys())
@@ -577,6 +608,9 @@ class DNACell(tf.nn.rnn_cell.RNNCell):
 
         if 'dx' in inputs:
             state_action_z.append(inputs['dx'])
+
+        if 'da' in inputs and self.hparams.add_da_to_z:
+            state_action_z.append(inputs['da'])
 
         if 'states' in inputs:
             state_action.append(state)
@@ -963,6 +997,7 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             additional_encoded_actions = {}
             additional_encoded_actions['encoded_actions_inverse'] = inverse_action_probs['action_inverse_mu'] + \
                 tf.exp(inverse_action_probs['action_inverse_log_sigma_sq'] / 2.0) * eps
+            print("inverse actions", additional_encoded_actions['encoded_actions_inverse'])
             additional_encoded_actions['original_encoded_actions'] = inputs['encoded_actions'] - 0
 
             if mode != 'test':
@@ -987,6 +1022,26 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
         if hparams.decode_from_inverse:
             # print("Decoding from inverse:")
             decoded_actions['decoded_actions_inverse'], decoded_actions['decoded_actions_inverse_log_sigma'] = action_decoder_fn(additional_encoded_actions['encoded_actions_inverse'], inputs['actions'].shape, hparams=hparams)
+
+        if mode == 'test' and hparams.learn_z_seq_prior:
+            num_samples = 10
+            eps = tf.random_normal([1, num_samples, int(r_prior_z_mu.shape[-1])], 0, 1)
+            print("eps:", eps)
+            r_prior_samples = r_prior_z_mu + tf.exp(r_prior_z_log_sigma_sq / 2.0) * eps
+            print("r_priot_samples", r_prior_samples)
+            r_prior_samples = tf.reshape(r_prior_samples, [1, num_samples, r_prior_samples.shape[-1]])
+            decoded, decoded_log_sigma = action_decoder_fn(r_prior_samples, r_prior_samples.shape, hparams=hparams)
+            decoded_actions['decoded_r_prior'] = decoded
+            decoded_actions['decoded_r_prior_log_sigma'] = decoded_log_sigma
+
+            if h_prior_z_mu.shape[1] == 1:
+                eps = tf.random_normal([int(h_prior_z_mu.shape[0]), int(num_samples), int(h_prior_z_mu.shape[2])] , 0, 1)
+                print("eps:", eps)
+                h_prior_samples = h_prior_z_mu + tf.exp(h_prior_z_log_sigma_sq / 2.0) * eps
+                print("H_prior", h_prior_samples)
+                decoded, decoded_log_sigma = action_decoder_fn(h_prior_samples, h_prior_samples.shape, hparams=hparams)
+                decoded_actions['decoded_h_prior'] = decoded
+                decoded_actions['decoded_h_prior_log_sigma'] = decoded_log_sigma
 
     inputs = {name: tf_utils.maybe_pad_or_slice(input, hparams.sequence_length - 1)
               for name, input in inputs.items()}
@@ -1182,7 +1237,9 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             stop_action_decoder_gradient=False,
             rescale_actions_2=False,
             divergence_on_z="js",
-            action_decoder_variance="none"
+            action_decoder_variance="none",
+            add_da_to_z=False,
+            action_encoder_domain_var='none',
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
