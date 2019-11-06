@@ -318,6 +318,35 @@ def main():
                      #   action_image[2*gt_ims.shape[1]:3*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
                     cv2.imwrite(os.path.join(args.output_png_dir, action_fname), action_image * 255)
 
+                if 'decoded_h_prior' in model_outputs.keys():
+                    gt_ims = sess_inputs['images'][i]
+                    for domain in ['r', 'h']:
+                        print("decoded_{}_prior".format(domain), model_outputs['decoded_{}_prior'.format(domain)].shape)
+                        action_fname = "prior_{}_action_image_%05d_%02d.png".format(domain) % (sample_ind + i, stochastic_sample_ind)
+                        im_width = gt_ims.shape[2]
+                        action_image = np.ones((gt_ims.shape[1] * 2, im_width * (gt_ims.shape[0]), gt_ims.shape[3]))
+                        for t in range(gt_ims.shape[0]):
+                            action_image[:gt_ims.shape[1], t*im_width:(t+1)*im_width] = cv2.cvtColor(gt_ims[t], cv2.COLOR_RGB2BGR)
+
+                        gt_actions = sess_inputs['actions'][i]
+                        if model.hparams.rescale_actions:
+                            gt_actions = gt_actions / np.array([0.07, 0.07, 0.5, 0.15])
+                        for t in range(gt_actions.shape[0]):
+                            arrow_image = np.ones((gt_ims.shape[1], gt_ims.shape[2], gt_ims.shape[3]))
+                            center = (gt_ims.shape[2]//2, gt_ims.shape[1]//2)
+                            scale = min(center[0], center[1])
+                            head_size = 2
+                            
+                            for k in range(model_outputs['decoded_r_prior'].shape[0]):
+                                if domain == 'r':
+                                    inv_end = (center[0] + int(model_outputs['decoded_r_prior'][k][0][1]*scale), center[1] + int(model_outputs['decoded_r_prior'][k][0][0]*scale))
+                                elif domain == 'h':
+                                    inv_end = (center[0] + int(model_outputs['decoded_h_prior'][k][t][1]*scale), center[1] + int(model_outputs['decoded_h_prior'][k][t][0]*scale))
+                                cv2.arrowedLine(arrow_image, center, inv_end, (0, 0, 1), 1)
+
+                            action_image[gt_ims.shape[1]:2*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
+
+                        cv2.imwrite(os.path.join(args.output_png_dir, action_fname), action_image * 255)
 
         sample_ind += args.batch_size
     print("mses:", mses)
