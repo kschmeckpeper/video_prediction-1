@@ -196,7 +196,7 @@ def action_encoder_fn(inputs, hparams=None, norm=None):
                 out = norm_layer(out)
             out = tf.nn.relu(out)
     encoded_action_size = hparams.encoded_action_size
-    if hparams.action_encoder_domain_var == 'constant':
+    if hparams.action_encoder_domain_var == 'constant' or hparams.action_encoder_domain_var == 'variable':
         encoded_action_size -= 1
     with tf.variable_scope('action_encoder_out_mu'):
         action_mu = dense(out, encoded_action_size, kernel_init=None, bias_init=None)
@@ -218,6 +218,23 @@ def action_encoder_fn(inputs, hparams=None, norm=None):
                                      tf.constant(-1.0, shape=(action_log_sigma_sq.shape[0],
                                                                               action_log_sigma_sq.shape[1],
                                                                               1))], -1)
+    elif hparams.action_encoder_domain_var == 'variable':
+        action_encoder_mu = tf.Variable(0.0)
+        action_encoder_mu = tf.Print(action_encoder_mu, [action_encoder_mu], "action_encoder_mu")
+        action_encoder_mu = tf.reshape(action_encoder_mu, [1, 1, 1])
+        action_encoder_mu = tf.tile(action_encoder_mu, (action_mu.shape[0],
+                                                        action_mu.shape[1],
+                                                        1))
+        print("action_encoder_mu", action_encoder_mu)
+        action_mu = tf.concat([action_mu, action_encoder_mu], -1)
+
+        action_encoder_var = tf.Variable(0.0)
+        action_encoder_var = tf.reshape(action_encoder_var, [1, 1, 1])
+        action_encoder_var = tf.Print(action_encoder_var, [action_encoder_var], "action_encoder_var")
+        action_encoder_var = tf.tile(action_encoder_var, (action_log_sigma_sq.shape[0],
+                                                          action_log_sigma_sq.shape[1],
+                                                          1))
+        action_log_sigma_sq = tf.concat([action_log_sigma_sq, action_encoder_var], -1)
 
     outputs = {'action_log_sigma_sq': action_log_sigma_sq,
                'action_mu': action_mu}
@@ -283,7 +300,7 @@ def inverse_model_fn(inputs, hparams=None):
 
     encoded_action_size = hparams.encoded_action_size
 
-    if hparams.action_encoder_domain_var == 'constant':
+    if hparams.action_encoder_domain_var == 'constant' or hparams.action_encoder_domain_var == 'variable':
         encoded_action_size -= 1
     outputs = create_encoder(image_pairs,
                              e_net=hparams.inverse_model_net,
@@ -304,6 +321,23 @@ def inverse_model_fn(inputs, hparams=None):
                                                 tf.constant(-1.0,  shape=(outputs['enc_zs_log_sigma_sq'].shape[0],
                                                                                          outputs['enc_zs_log_sigma_sq'].shape[1],
                                                                                          1))], -1)
+    elif hparams.action_encoder_domain_var == 'variable':
+        inverse_model_mu = tf.Variable(0.0)
+        inverse_model_mu = tf.Print(inverse_model_mu, [inverse_model_mu], 'inverse_model_mu')
+        inverse_model_mu = tf.reshape(inverse_model_mu, [1, 1, 1])
+        inverse_model_mu = tf.tile(inverse_model_mu, (outputs['enc_zs_mu'].shape[0],
+                                                      outputs['enc_zs_mu'].shape[1],
+                                                      1))
+        outputs['enc_zs_mu'] = tf.concat([outputs['enc_zs_mu'], inverse_model_mu], -1)
+
+        inverse_model_var = tf.Variable(0.0)
+        inverse_model_var = tf.Print(inverse_model_var, [inverse_model_var], 'inverse_model_var')
+        inverse_model_var = tf.reshape(inverse_model_var, [1, 1, 1])
+        inverse_model_var = tf.tile(inverse_model_var, (outputs['enc_zs_log_sigma_sq'].shape[0],
+                                                        outputs['enc_zs_log_sigma_sq'].shape[1],
+                                                        1))
+        outputs['enc_zs_log_sigma_sq'] = tf.concat([outputs['enc_zs_log_sigma_sq'], inverse_model_var], -1)
+        
     renamed_outputs = {'action_inverse_mu': outputs['enc_zs_mu'],
                        'action_inverse_log_sigma_sq': outputs['enc_zs_log_sigma_sq']}
     # print("Outputs for inverse model", renamed_outputs.keys())
@@ -1240,6 +1274,9 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             action_decoder_variance="none",
             add_da_to_z=False,
             action_encoder_domain_var='none',
+            h_prior_dims=-1,
+            h_prior_from_r_weight=-1.0,
+            h_prior_from_h_weight=-1.0
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -1323,17 +1360,37 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
                 r_kl_loss = kl_loss_dist(tmp_inverse_mu, tmp_inverse_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
 
                 if self.mode == 'train':
-                    tmp_mu_1 = outputs['action_inverse_mu'][:, self.hparams.num_supervised:, :]
-                    tmp_log_sigma_sq_1 = outputs['action_inverse_log_sigma_sq'][:, self.hparams.num_supervised:, :]
-                    #tmp_mu_1 = tf.gather(outputs['action_inverse_mu'], h_idx, axis=1)
-                    #tmp_log_sigma_sq_1 = tf.gather(outputs['action_inverse_log_sigma_sq'], h_idx, axis=1)
+                    if self.hparams.h_prior_dims == -1:
+                        tmp_mu_1 = outputs['action_inverse_mu'][:, self.hparams.num_supervised:, :]
+                        tmp_log_sigma_sq_1 = outputs['action_inverse_log_sigma_sq'][:, self.hparams.num_supervised:, :]
 
-                    tmp_mu_2 = outputs['h_prior_z_mu'][:, self.hparams.num_supervised:, :]
-                    tmp_log_sigma_sq_2 = outputs['h_prior_z_log_sigma_sq'][:, self.hparams.num_supervised:, :]
-                    #tmp_mu_2 = tf.gather(outputs['h_prior_z_mu'], h_idx, axis=1)
-                    #tmp_log_sigma_sq_2 = tf.gather(outputs['h_prior_z_log_sigma_sq'], h_idx, axis=1)
+                        tmp_mu_2 = outputs['h_prior_z_mu'][:, self.hparams.num_supervised:, :]
+                        tmp_log_sigma_sq_2 = outputs['h_prior_z_log_sigma_sq'][:, self.hparams.num_supervised:, :]
 
-                    h_kl_loss = kl_loss_dist(tmp_mu_1, tmp_log_sigma_sq_1, tmp_mu_2, tmp_log_sigma_sq_2)
+                        h_kl_loss = kl_loss_dist(tmp_mu_1, tmp_log_sigma_sq_1, tmp_mu_2, tmp_log_sigma_sq_2)
+                    else:
+                        tmp_mu_1 = outputs['action_inverse_mu'][:, self.hparams.num_supervised:, :self.hparams.h_prior_dims]
+                        tmp_log_sigma_sq_1 = outputs['action_inverse_log_sigma_sq'][:, self.hparams.num_supervised:, :self.hparams.h_prior_dims]
+                        tmp_mu_2 = outputs['h_prior_z_mu'][:, self.hparams.num_supervised:, :self.hparams.h_prior_dims]
+                        tmp_log_sigma_sq_2 = outputs['h_prior_z_log_sigma_sq'][:, self.hparams.num_supervised:, :self.hparams.h_prior_dims]
+
+                        h_kl_loss_from_h = kl_loss_dist(tmp_mu_1, tmp_log_sigma_sq_1, tmp_mu_2, tmp_log_sigma_sq_2)
+                        h_kl_loss_from_h = tf.Print(h_kl_loss_from_h, [h_kl_loss_from_h], "h_kl_loss_from_h")
+                        
+                        tmp_mu_1 = outputs['action_inverse_mu'][:, self.hparams.num_supervised:, self.hparams.h_prior_dims:]
+                        tmp_log_sigma_sq_1 = outputs['action_inverse_log_sigma_sq'][:, self.hparams.num_supervised:, self.hparams.h_prior_dims:]
+                        tmp_mu_2 = outputs['r_prior_z_mu'][self.hparams.h_prior_dims:]
+                        tmp_log_sigma_sq_2 = outputs['r_prior_z_log_sigma_sq'][self.hparams.h_prior_dims:]
+                        h_kl_loss_from_r = kl_loss_dist(tmp_mu_1, tmp_log_sigma_sq_1, tmp_mu_2, tmp_log_sigma_sq_2)
+                        h_kl_loss_from_r = tf.Print(h_kl_loss_from_r, [h_kl_loss_from_r], "h_kl_loss_from_r")
+
+                        if self.hparams.h_prior_from_h_weight < 0 or self.hparams.h_prior_from_r_weight < 0:
+                            print("using default ratio weights")
+                            h_kl_loss = h_kl_loss_from_h * self.hparams.h_prior_dims / self.hparams.encoded_action_size + \
+                                        h_kl_loss_from_r * (1.0 - self.hparams.h_prior_dims / self.hparams.encoded_action_size)
+                        else:
+                            h_kl_loss = h_kl_loss_from_h * self.hparams.h_prior_from_h_weight + \
+                                        h_kl_loss_from_r * self.hparams.h_prior_from_r_weight
                     inverse_action_encoder_kl_loss = r_kl_loss + h_kl_loss
                 else:
                     inverse_action_encoder_kl_loss = r_kl_loss
