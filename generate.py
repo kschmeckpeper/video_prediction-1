@@ -137,7 +137,8 @@ def main():
     else:
         num_examples_per_epoch = dataset.num_examples_per_epoch()
     if num_examples_per_epoch % args.batch_size != 0:
-        raise ValueError('batch_size should evenly divide the dataset')
+        raise ValueError('batch_size should evenly divide the dataset {} % {} != 0'.format(num_examples_per_epoch, args.batch_size))
+
 
     inputs, targets = dataset.make_batch(args.batch_size)
 #    if not isinstance(model, models.GroundTruthVideoPredictionModel):
@@ -148,8 +149,11 @@ def main():
 
     input_phs = {k: tf.placeholder(v.dtype, v.shape, '%s_ph' % k) for k, v in inputs.items()}
 
+    print("input_phs", input_phs)
+    target_phs = tf.placeholder(targets.dtype, targets.shape, 'targets_ph')
+
     with tf.variable_scope(''):
-        model.build_graph(input_phs, targets)
+        model.build_graph(input_phs, target_phs)
     
     for output_dir in (args.output_gif_dir, args.output_png_dir):
         if not os.path.exists(output_dir):
@@ -180,22 +184,33 @@ def main():
     print("outputs:", model.outputs.keys())
     sample_ind = 0
     mses = {}
+    all_metrics = {}
     while True:
         print("inputs:", inputs.keys())
         if args.num_samples and sample_ind >= args.num_samples:
             break
         try:
-            input_results = sess.run(inputs)
+            input_results, target_results = sess.run([inputs, targets])
         except tf.errors.OutOfRangeError:
             break
         print("evaluation samples from %d to %d" % (sample_ind, sample_ind + args.batch_size))
 
         feed_dict = {input_ph: input_results[name] for name, input_ph in input_phs.items()}
+        feed_dict[target_phs] = target_results
+        print("Feed_dict", feed_dict.keys())
+
+        print("target_results", target_results.shape)
         for stochastic_sample_ind in range(args.num_stochastic_samples):
-            goals = [model.outputs, model.metrics, model.inputs]
-            model_outputs, metrics, sess_inputs = sess.run(goals, feed_dict=feed_dict)
+            goals = [model.outputs, model.metrics, model.inputs, model.targets]
+            model_outputs, metrics, sess_inputs, tmp_targets = sess.run(goals, feed_dict=feed_dict)
+            print("target_diff", np.mean((tmp_targets - target_results)**2))
             gen_images = model_outputs['gen_images']
-    
+            for metric in metrics:
+                print("metric:", metric, metrics[metric])
+                if metric not in all_metrics:
+                    all_metrics[metric] = []
+                all_metrics[metric].append(metrics[metric])
+
             if 'decoded_actions' in model_outputs:
                 visualize_actions = True
                 auto_enc_actions = model_outputs['decoded_actions']
@@ -208,9 +223,11 @@ def main():
                 r_prior_log_sigma_sq = model_outputs['r_prior_z_log_sigma_sq']
                 h_prior_mu = model_outputs['h_prior_z_log_sigma_sq']
                 h_prior_log_sigma_sq = model_outputs['h_prior_z_log_sigma_sq']
-
+            
 
             for i, gen_images_ in enumerate(gen_images):
+                
+                print("Mse by hand", np.mean((target_results[i] -gen_images_)**2))
                 gen_images_ = (gen_images_ * 255.0).astype(np.uint8)
 #                print("actions:", inputs['actions'][i])
 #                print("enc/dec action", auto_enc_actions[i])
@@ -250,16 +267,21 @@ def main():
                     save_gif(os.path.join(args.output_gif_dir, gen_images_fname),
                             gen_images_[:args.gif_length] if args.gif_length else gen_images_, fps=args.fps)
                 if not args.no_im:
+                    if not os.path.exists(os.path.join(args.output_png_dir, "context_images")):
+                        os.makedirs(os.path.join(args.output_png_dir, "context_images"))
                     for t, im_ in enumerate(sess_inputs['images'][i]):
+
                         im = (im_ * 255.0).astype(np.uint8)
                         im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
-                        cv2.imwrite(os.path.join(args.output_png_dir, "context_image_{}_{}_{}.png".format(sample_ind+i, stochastic_sample_ind, t)), im)
+                        cv2.imwrite(os.path.join(args.output_png_dir, "context_images", "context_image_{}_{}_{}.png".format(sample_ind+i, stochastic_sample_ind, t)), im)
 
+                    if not os.path.exists(os.path.join(args.output_png_dir, "gen_images")):
+                        os.makedirs(os.path.join(args.output_png_dir, "gen_images"))
                     gen_image_fname_pattern = 'gen_image_%%05d_%%02d_%%0%dd.png' % max(2, len(str(len(gen_images_) - 1)))
                     for t, gen_image in enumerate(gen_images_):
                         gen_image_fname = gen_image_fname_pattern % (sample_ind + i, stochastic_sample_ind, t)
                         gen_image = cv2.cvtColor(gen_image, cv2.COLOR_RGB2BGR)
-                        cv2.imwrite(os.path.join(args.output_png_dir, gen_image_fname), gen_image)
+                        cv2.imwrite(os.path.join(args.output_png_dir, "gen_images", gen_image_fname), gen_image)
 
                 if 'r_prior_z_mu' in model.outputs:
                     x = np.linspace(-3, 3, 100)
@@ -274,6 +296,8 @@ def main():
                         plt.plot(x, stats.norm.pdf(x, r_prior_mu[j], np.exp(r_prior_log_sigma_sq[j] / 2)), color='green')
 
                 if not args.no_actions and visualize_actions:
+                    if not os.path.exists(os.path.join(args.output_png_dir, "action_images")):
+                        os.makedirs(os.path.join(args.output_png_dir, "action_images"))
                     gt_ims = sess_inputs['images'][i]
                     action_fname = "action_image_%05d_%02d.png" % (sample_ind + i, stochastic_sample_ind)
                     im_width = gt_ims.shape[2]
@@ -316,9 +340,12 @@ def main():
                     
 
                      #   action_image[2*gt_ims.shape[1]:3*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
-                    cv2.imwrite(os.path.join(args.output_png_dir, action_fname), action_image * 255)
+                    cv2.imwrite(os.path.join(args.output_png_dir, "action_images", action_fname), action_image * 255)
 
                 if 'decoded_h_prior' in model_outputs.keys():
+                    if not os.path.exists(os.path.join(args.output_png_dir, "prior_images")):
+                        os.makedirs(os.path.join(args.output_png_dir, "prior_images"))
+                    
                     gt_ims = sess_inputs['images'][i]
                     for domain in ['r', 'h']:
                         print("decoded_{}_prior".format(domain), model_outputs['decoded_{}_prior'.format(domain)].shape)
@@ -346,9 +373,23 @@ def main():
 
                             action_image[gt_ims.shape[1]:2*gt_ims.shape[1], (t)*im_width + im_width//2:(t+1)*im_width+im_width//2] = arrow_image
 
-                        cv2.imwrite(os.path.join(args.output_png_dir, action_fname), action_image * 255)
+                        cv2.imwrite(os.path.join(args.output_png_dir, "prior_images", action_fname), action_image * 255)
 
         sample_ind += args.batch_size
+
+    print("all_metrics", all_metrics)
+
+    all_metrics['stats'] = {}
+    for metric in all_metrics:
+        if metric == 'stats':
+            continue
+        print("Metric:", metric, "mean", np.mean(all_metrics[metric]), "std", np.std(all_metrics[metric]))
+        all_metrics['stats'][metric] = {'mean': str(np.mean(all_metrics[metric])), 'std':str(np.std(all_metrics[metric]))}
+        for i in range(len(all_metrics[metric])):
+            all_metrics[metric][i] = str(all_metrics[metric][i])
+
+    with open(os.path.join(args.output_png_dir, "all_metrics.json"), 'w') as metrics_file:
+        json.dump(all_metrics, metrics_file, ensure_ascii=False, indent=4)
     print("mses:", mses)
 
     bins = np.linspace(-3, 3, 100)
