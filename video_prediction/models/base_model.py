@@ -113,8 +113,6 @@ class BaseVideoPredictionModel(object):
         self.inputs = inputs
         self.targets = targets
 
-        
-
         # call it once here to create the variables
         with tf.variable_scope('vgg'):
             vgg_network.vgg16(tf.placeholder(tf.float32, shape=[None] * 4))
@@ -290,8 +288,15 @@ class VideoPredictionModel(BaseVideoPredictionModel):
         else:
             self.learning_rate = self.hparams.lr
         if mode == 'train':
-            self.g_optimizer = tf.train.AdamOptimizer(self.learning_rate, self.hparams.beta1, self.hparams.beta2)
-            self.d_optimizer = tf.train.AdamOptimizer(self.learning_rate, self.hparams.beta1, self.hparams.beta2)
+            if self.hparams.optimizer == 'adam':
+                self.g_optimizer = tf.train.AdamOptimizer(self.learning_rate, self.hparams.beta1, self.hparams.beta2)
+                self.d_optimizer = tf.train.AdamOptimizer(self.learning_rate, self.hparams.beta1, self.hparams.beta2)
+            elif self.hparams.optimizer == 'radam':
+                from keras_radam.training import RAdamOptimizer
+                self.g_optimizer = RAdamOptimizer(self.learning_rate)
+                self.d_optimizer = RAdamOptimizer(self.learning_rate)
+            else:
+                raise NotImplementedError("Requested optimizer is not implemented")
         else:
             self.g_optimizer = None
             self.d_optimizer = None
@@ -392,6 +397,7 @@ class VideoPredictionModel(BaseVideoPredictionModel):
             kl_anneal_k=-1.0,
             kl_anneal_steps=(50000, 100000),
             z_l1_weight=0.0,
+            optimizer='adam',
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -679,6 +685,11 @@ class VideoPredictionModel(BaseVideoPredictionModel):
 
     def generator_loss_fn(self, inputs, outputs, targets):
         hparams = self.hparams
+        print("targets:", targets.shape)
+        if hparams.oleh_model:
+            if targets.shape[1] > outputs['gen_images'].shape[1]:
+                targets = targets[:, hparams.num_supervised:, :, :, :]
+
         gen_losses = OrderedDict()
         if hparams.l1_weight or hparams.l2_weight or hparams.vgg_cdist_weight:
             gen_images = outputs.get('gen_images_enc', outputs['gen_images'])

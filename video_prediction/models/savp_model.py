@@ -925,8 +925,15 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
         if hparams.learn_z_seq_prior:
             # print("Learn z_seq_priot\n\n\n\n\n")
             # Learn prior for robot data
-            r_prior_z_mu = tf.get_variable('r_prior_z_mu', initializer=tf.zeros([hparams.encoded_action_size]))
-            r_prior_z_log_sigma_sq = tf.get_variable('r_prior_z_log_sigma_sq', initializer=tf.zeros([hparams.encoded_action_size]))
+            if hparams.shared_prior_dims:
+                r_prior_z_mu = tf.get_variable('r_prior_z_mu', initializer=tf.zeros([hparams.encoded_action_size - hparams.shared_prior_dims]))
+                r_prior_z_log_sigma_sq = tf.get_variable('r_prior_z_log_sigma_sq', initializer=tf.zeros([hparams.encoded_action_size - hparams.shared_prior_dims]))
+
+                shared_prior_z_mu = tf.get_variable('shared_prior_z_mu', initializer=tf.zeros([hparams.shared_prior_dims]))
+                shared_prior_z_log_sigma_sq = tf.get_variable('shared_prior_z_log_sigma_sq', initializer=tf.zeros([hparams.shared_prior_dims]))
+            else:
+                r_prior_z_mu = tf.get_variable('r_prior_z_mu', initializer=tf.zeros([hparams.encoded_action_size]))
+                r_prior_z_log_sigma_sq = tf.get_variable('r_prior_z_log_sigma_sq', initializer=tf.zeros([hparams.encoded_action_size]))
 
             with tf.variable_scope('image_encoder'):
                 enc_image_probs = image_encoder_fn(inputs, hparams=hparams)
@@ -1064,7 +1071,8 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             r_prior_samples = r_prior_z_mu + tf.exp(r_prior_z_log_sigma_sq / 2.0) * eps
             print("r_priot_samples", r_prior_samples)
             r_prior_samples = tf.reshape(r_prior_samples, [1, num_samples, r_prior_samples.shape[-1]])
-            decoded, decoded_log_sigma = action_decoder_fn(r_prior_samples, r_prior_samples.shape, hparams=hparams)
+            shape = [r_prior_samples.shape[0], r_prior_samples.shape[1], inputs['actions'].shape[-1]]
+            decoded, decoded_log_sigma = action_decoder_fn(r_prior_samples, shape, hparams=hparams)
             decoded_actions['decoded_r_prior'] = decoded
             decoded_actions['decoded_r_prior_log_sigma'] = decoded_log_sigma
 
@@ -1073,7 +1081,8 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                 print("eps:", eps)
                 h_prior_samples = h_prior_z_mu + tf.exp(h_prior_z_log_sigma_sq / 2.0) * eps
                 print("H_prior", h_prior_samples)
-                decoded, decoded_log_sigma = action_decoder_fn(h_prior_samples, h_prior_samples.shape, hparams=hparams)
+                shape = [h_prior_samples.shape[0], h_prior_samples.shape[1], inputs['actions'].shape[-1]]
+                decoded, decoded_log_sigma = action_decoder_fn(h_prior_samples, shape, hparams=hparams)
                 decoded_actions['decoded_h_prior'] = decoded
                 decoded_actions['decoded_h_prior_log_sigma'] = decoded_log_sigma
 
@@ -1115,6 +1124,15 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             inputs['da'] = tf.concat([inputs['da'], inputs['da'][:, :hparams.num_supervised, :]], axis=1)
         if 'dx' in inputs.keys():
             inputs['dx'] = tf.concat([inputs['dx'], inputs['dx'][:, :hparams.num_supervised, :]], axis=1)
+
+        if hparams.oleh_model:
+            print("Oleh model")
+            hparams.batch_size = hparams.batch_size - hparams.num_supervised
+            print("batch size:", hparams.batch_size)
+            inputs['images'] = inputs['images'][:, hparams.num_supervised:, :, :, :]
+            inputs['actions'] = inputs['actions'][:, hparams.num_supervised:, :]
+            inputs['use_action'] = inputs['use_action'][:, hparams.num_supervised:, :]
+            inputs['encoded_actions'] = inputs['encoded_actions'][:, hparams.num_supervised:, :]
 
 
     cell = DNACell(inputs, hparams)
@@ -1163,6 +1181,9 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
             outputs['r_prior_z_log_sigma_sq'] = r_prior_z_log_sigma_sq
             outputs['h_prior_z_mu'] = h_prior_z_mu
             outputs['h_prior_z_log_sigma_sq'] = h_prior_z_log_sigma_sq
+            if hparams.shared_prior_dims:
+                outputs['shared_prior_z_mu'] = shared_prior_z_mu
+                outputs['shared_prior_z_log_sigma_sq'] = shared_prior_z_log_sigma_sq
 
         elif hparams.nda and not hparams.deterministic_da:
             outputs['da0_mu'] = da_mu[0]
@@ -1276,7 +1297,11 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             action_encoder_domain_var='none',
             h_prior_dims=-1,
             h_prior_from_r_weight=-1.0,
-            h_prior_from_h_weight=-1.0
+            h_prior_from_h_weight=-1.0,
+            shared_prior_dims=0,
+            oleh_model=False,
+            use_noise=False,
+            noise_sigma=1.0
         )
         return dict(itertools.chain(default_hparams.items(), hparams.items()))
 
@@ -1311,7 +1336,18 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             if not self.hparams.learn_z_seq_prior:
                 action_encoder_kl_loss = kl_loss(tmp_mu, tmp_log_sigma_sq)
             else:
-                action_encoder_kl_loss = kl_loss_dist(tmp_mu, tmp_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
+                if self.hparams.shared_prior_dims:
+                    tmp_mu = outputs['action_mu'][:, :self.hparams.num_supervised, :self.hparams.shared_prior_dims]
+                    tmp_log_sigma_sq = outputs['action_log_sigma_sq'][:, :self.hparams.num_supervised, :self.hparams.shared_prior_dims]
+                    shared_action_encoder_kl_loss = kl_loss_dist(tmp_mu, tmp_log_sigma_sq, outputs['shared_prior_z_mu'], outputs['shared_prior_z_log_sigma_sq'])
+
+                    tmp_mu = outputs['action_mu'][:, :self.hparams.num_supervised, self.hparams.shared_prior_dims:]
+                    tmp_log_sigma_sq = outputs['action_log_sigma_sq'][:, :self.hparams.num_supervised, self.hparams.shared_prior_dims:]
+                    robot_action_encoder_kl_loss = kl_loss_dist(tmp_mu, tmp_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
+                    action_encoder_kl_loss = shared_action_encoder_kl_loss * self.hparams.shared_prior_dims / self.hparams.encoded_action_size + \
+                                             robot_action_encoder_kl_loss * (1.0 - self.hparams.shared_prior_dims / self.hparams.encoded_action_size)
+                else:
+                    action_encoder_kl_loss = kl_loss_dist(tmp_mu, tmp_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
 
             gen_losses['action_encoder_kl_loss'] = (action_encoder_kl_loss, self.hparams.action_encoder_kl_weight)
 
@@ -1354,13 +1390,49 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             if not self.hparams.learn_z_seq_prior:
                 inverse_action_encoder_kl_loss = kl_loss(outputs['action_inverse_mu'], outputs['action_inverse_log_sigma_sq'])
             else:
+                if self.hparams.oleh_model:
+                    raise NotImplementedError
                 tmp_inverse_mu = outputs['action_inverse_mu'][:, :self.hparams.num_supervised, :]
                 tmp_inverse_log_sigma_sq = outputs['action_inverse_log_sigma_sq'][:, :self.hparams.num_supervised, :]
 
-                r_kl_loss = kl_loss_dist(tmp_inverse_mu, tmp_inverse_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
+                if not self.hparams.shared_prior_dims:
+                    r_kl_loss = kl_loss_dist(tmp_inverse_mu, tmp_inverse_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
+                else:
+                    
+                    tmp_inverse_mu = outputs['action_inverse_mu'][:, :self.hparams.num_supervised, self.hparams.shared_prior_dims:]
+                    tmp_inverse_log_sigma_sq = outputs['action_inverse_log_sigma_sq'][:, :self.hparams.num_supervised, self.hparams.shared_prior_dims:]
+
+                    r_kl_loss_from_r = kl_loss_dist(tmp_inverse_mu, tmp_inverse_log_sigma_sq, outputs['r_prior_z_mu'], outputs['r_prior_z_log_sigma_sq'])
+
+                    tmp_inverse_mu = outputs['action_inverse_mu'][:, :self.hparams.num_supervised, :self.hparams.shared_prior_dims]
+                    tmp_inverse_log_sigma_sq = outputs['action_inverse_log_sigma_sq'][:, :self.hparams.num_supervised, :self.hparams.shared_prior_dims]
+
+                    r_kl_loss_from_shared = kl_loss_dist(tmp_inverse_mu, tmp_inverse_log_sigma_sq, outputs['shared_prior_z_mu'], outputs['shared_prior_z_log_sigma_sq'])
+                    r_kl_loss = r_kl_loss_from_shared * self.hparams.shared_prior_dims / self.hparams.encoded_action_size + \
+                                r_kl_loss_from_r * ( 1.0 - self.hparams.shared_prior_dims / self.hparams.encoded_action_size)
 
                 if self.mode == 'train':
-                    if self.hparams.h_prior_dims == -1:
+                    if self.hparams.shared_prior_dims:
+
+
+
+                        tmp_mu_1 = outputs['action_inverse_mu'][:, self.hparams.num_supervised:, self.hparams.shared_prior_dims:]
+                        tmp_log_sigma_sq_1 = outputs['action_inverse_log_sigma_sq'][:, self.hparams.num_supervised:, self.hparams.shared_prior_dims:]
+                        tmp_mu_2 = outputs['h_prior_z_mu'][:, self.hparams.num_supervised:, self.hparams.shared_prior_dims:]
+                        tmp_log_sigma_sq_2 = outputs['h_prior_z_log_sigma_sq'][:, self.hparams.num_supervised:, self.hparams.shared_prior_dims:]
+
+                        h_kl_loss_from_h = kl_loss_dist(tmp_mu_1, tmp_log_sigma_sq_1, tmp_mu_2, tmp_log_sigma_sq_2)
+                        h_kl_loss_from_h = tf.Print(h_kl_loss_from_h, [h_kl_loss_from_h], "h_kl_loss_from_h")
+                        
+                        tmp_mu_1 = outputs['action_inverse_mu'][:, self.hparams.num_supervised:, :self.hparams.shared_prior_dims]
+                        tmp_log_sigma_sq_1 = outputs['action_inverse_log_sigma_sq'][:, self.hparams.num_supervised:, :self.hparams.shared_prior_dims]
+                        h_kl_loss_from_shared = kl_loss_dist(tmp_mu_1, tmp_log_sigma_sq_1, outputs['shared_prior_z_mu'], outputs['shared_prior_z_log_sigma_sq'])
+                        h_kl_loss_from_shared = tf.Print(h_kl_loss_from_shared, [h_kl_loss_from_shared], "h_kl_loss_from_shared")
+
+                        h_kl_loss = h_kl_loss_from_shared * self.hparams.shared_prior_dims / self.hparams.encoded_action_size + \
+                                    h_kl_loss_from_h * (1.0 - self.hparams.shared_prior_dims / self.hparams.encoded_action_size)
+
+                    elif self.hparams.h_prior_dims == -1:
                         tmp_mu_1 = outputs['action_inverse_mu'][:, self.hparams.num_supervised:, :]
                         tmp_log_sigma_sq_1 = outputs['action_inverse_log_sigma_sq'][:, self.hparams.num_supervised:, :]
 
@@ -1397,6 +1469,8 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 
             gen_losses['action_inverse_encoder_kl_loss'] = (inverse_action_encoder_kl_loss, self.hparams.inverse_action_encoder_kl_weight)
 
+            tmp_mu = outputs['action_mu'][:, :self.hparams.num_supervised, :]
+            tmp_log_sigma_sq = outputs['action_log_sigma_sq'][:, :self.hparams.num_supervised, :]
             tmp_inverse_mu = outputs['action_inverse_mu'][:, :self.hparams.num_supervised, :]
             tmp_inverse_log_sigma_sq = outputs['action_inverse_log_sigma_sq'][:, :self.hparams.num_supervised, :]
             
@@ -1404,6 +1478,10 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
 #            tmp_inverse_mu = tf.reshape(tmp_inverse_mu, [outputs['action_inverse_mu'].shape[0], -1, outputs['action_inverse_mu'].shape[-1]])
 #            tmp_inverse_log_sigma_sq = tf.gather(tf.reshape(outputs['action_inverse_log_sigma_sq'], [-1]), idx)
 #            tmp_inverse_log_sigma_sq = tf.reshape(tmp_inverse_log_sigma_sq, [outputs['action_inverse_log_sigma_sq'].shape[0], -1, outputs['action_inverse_log_sigma_sq'].shape[-1]])
+            if self.hparams.oleh_model:
+                tmp_inverse_mu = tf.stop_gradient(tmp_inverse_mu)
+                tmp_inverse_log_sigma_sq = tf.stop_gradient(tmp_inverse_log_sigma_sq)
+
             if self.hparams.divergence_on_z == 'js':
                 action_js_loss = js_loss(tmp_mu, tmp_log_sigma_sq, tmp_inverse_mu, tmp_inverse_log_sigma_sq)
             elif self.hparams.divergence_on_z == 'jeffreys':
