@@ -1059,13 +1059,36 @@ def generator_fn(inputs, mode, outputs_enc=None, hparams=None):
                 # print("Encoded actions.shape", inputs['encoded_actions'].shape)
         else:
             assert not hparams.use_encoded_actions
-            inputs['actions_inverse'] = inverse_action_probs['action_inverse_mu']
-
             use_actions = tf.reshape(inputs['use_action'], [-1, 1])
             use_actions = tf.tile(use_actions, [1, inputs['actions'].shape[-1]])
             use_actions = tf.reshape(use_actions, [inputs['actions'].shape[0], inputs['actions'].shape[1], inputs['actions'].shape[2]])
-            if mode != 'test':
-                inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=inputs['actions_inverse'])
+            additional_encoded_actions = {}
+            print("inputs['actions']", inputs['actions'])
+            print("use actions:", use_actions)
+            if hparams.use_zero_actions_for_action_free:
+                print("Using zero actions for action free")
+                assert not hparams.use_random_actions_for_action_free
+                zero_actions = tf.zeros(inputs['actions'].shape)
+                
+                if mode != 'test':
+                    inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=zero_actions)
+
+            elif hparams.use_random_actions_for_action_free:
+                print("using random actions for action free")
+                random_actions = tf.random_normal(inputs['actions'].shape, 0.0, 1.0)
+                if hparams.learn_random_actions_for_action_free:
+                    print("learning random actions")
+                    mean = tf.get_variable('fake_action_mu', initializer=tf.zeros([inputs['actions'].shape[-1]]))
+                    sigma = tf.get_variable('fake_action_sigma', initializer=tf.zeros([inputs['actions'].shape[-1]]))
+                    random_actions = mean + tf.exp(sigma) * eps
+
+                if mode != 'test':
+                    inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=random_actions)
+            else:
+                inputs['actions_inverse'] = inverse_action_probs['action_inverse_mu']
+
+                if mode != 'test':
+                    inputs['encoded_actions'] = tf.where(use_actions, x=inputs['actions'], y=inputs['actions_inverse'])
 
 #    if mode != 'test':
     if hparams.decode_actions and hparams.use_encoded_actions:
@@ -1279,6 +1302,9 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
             train_with_partial_actions=False,
             action_js_loss=0.1,
             deterministic_inverse=False,
+            use_zero_actions_for_action_free=False,
+            use_random_actions_for_action_free=False,
+            learn_random_actions_for_action_free=False,
             deterministic_inverse_mse=1.0,
             decode_from_inverse=False,
             use_domain_adaptation=False,
@@ -1530,7 +1556,7 @@ class SAVPVideoPredictionModel(VideoPredictionModel):
                     weight = self.hparams.action_encoder_kl_weight
                 gen_losses['action_inverse_kl_loss'] = (action_inverse_kl_loss, weight)
 
-        elif self.hparams.train_with_partial_actions:
+        elif self.hparams.train_with_partial_actions and not self.hparams.use_zero_actions_for_action_free and not self.hparams.use_random_actions_for_action_free:
             inverse_mse = l2_loss(inputs['actions_inverse'], inputs['encoded_actions'])
             gen_losses['action_deterministic_inverse_mse'] = (inverse_mse, self.hparams.deterministic_inverse_mse)
 
